@@ -83,8 +83,7 @@ u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	// get sockcall ID
 	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
 	// get record for storing this sockcall
-	rec_sc = &rec->sockcalls[get_sc_q_idx(rec->sc_t)];
-	rec->sc_t++;
+	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
 	// store data for this sockcall
 	rec_sc->type = DERAND_SOCKCALL_TYPE_SENDMSG;
 	rec_sc->sendmsg.flags = msg->msg_flags;
@@ -93,8 +92,30 @@ u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	return sc_id;
 }
 
+u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock, int flags, int *addr_len){
+	struct derand_recorder* rec = sk->recorder;
+	struct derand_rec_sockcall *rec_sc;
+	int sc_id;
+
+	if (!rec)
+		return 0;
+
+	// get sockcall ID
+	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
+	// get record for storing this sockcall
+	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
+	// store data for this sockcall
+	rec_sc->type = DERAND_SOCKCALL_TYPE_RECVMSG;
+	rec_sc->recvmsg.flags = nonblock & msg->msg_flags;
+	rec_sc->recvmsg.size = len;
+	// return sockcall ID 
+	return sc_id;
+}
+
 int bind_derand_ops(void){
 	derand_record_ops.recorder_destruct = recorder_destruct;
+	derand_record_ops.new_sendmsg = new_sendmsg;
+	derand_record_ops.new_recvmsg = new_recvmsg;
 	/* The recorder_create functions must be bind last, because they are the enabler of record */
 	derand_record_ops.server_recorder_create = server_recorder_create;
 	derand_record_ops.client_recorder_create = client_recorder_create;

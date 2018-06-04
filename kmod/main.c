@@ -37,7 +37,6 @@ fail_create_ctrl:
 
 static void __exit derand_exit(void)
 {
-	return;
 	// unbind derand_ops
 	unbind_derand_ops();
 
