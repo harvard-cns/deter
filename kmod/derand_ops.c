@@ -2,6 +2,7 @@
 #include <net/derand.h>
 #include <net/derand_ops.h>
 #include "derand_ctrl.h"
+#include "derand_recorder.h"
 
 // allocate memory for a socket
 void* derand_alloc_mem(void){

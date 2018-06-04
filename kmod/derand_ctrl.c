@@ -1,6 +1,7 @@
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include "derand_ctrl.h"
+#include "derand_recorder.h"
 
 struct derand_ctrl derand_ctrl = {
 	.addr = NULL,
