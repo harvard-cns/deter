@@ -28,6 +28,10 @@ struct derand_rec_sockcall{
 	};
 };
 
+#define EVENT_TYPE_TASKLET 1
+#define EVENT_TYPE_WRITE_TIMEOUT 2
+#define EVENT_TYPE_DELACK_TIMEOUT 3
+#define EVENT_TYPE_KEEPALIVE_TIMEOUT 4
 /* struct for each lock acquiring event */
 struct derand_event{
 	u32 seq;
