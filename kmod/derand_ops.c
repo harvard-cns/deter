@@ -5,7 +5,7 @@
 #include "derand_recorder.h"
 
 // allocate memory for a socket
-void* derand_alloc_mem(void){
+static void* derand_alloc_mem(void){
 	void* ret = NULL;
 	int n;
 
@@ -24,7 +24,7 @@ out:
  * Called when a connection is successfully built
  * i.e., after receiving SYN-ACK at client and after receiving ACK at server.
  * So this function is called in bottom-half, so we must not block*/
-void recorder_create(struct sock *sk){
+static void recorder_create(struct sock *sk){
 	// create derand_recorder
 	struct derand_recorder *rec = derand_alloc_mem();
 	if (!rec){
@@ -43,25 +43,25 @@ out:
 	return;
 }
 
-void server_recorder_create(struct sock *sk){
+static void server_recorder_create(struct sock *sk){
 	if (inet_sk(sk)->inet_sport == 0x8913){
 		printk("server sport = %hu, dport = %hu, creating recorder\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		recorder_create(sk);
 	}
 }
-void client_recorder_create(struct sock *sk){
+static void client_recorder_create(struct sock *sk){
 	printk("client sport = %hu, dport = %hu\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 }
 
 // recycle memory for a socket
-void derand_recycle_mem(void* addr){
+static void derand_recycle_mem(void* addr){
 	spin_lock_bh(&derand_ctrl.lock);
 	derand_ctrl.stack[derand_ctrl.top++] = (addr - derand_ctrl.addr) / sizeof(struct derand_recorder);
 	spin_unlock_bh(&derand_ctrl.lock);
 }
 /* destruct a derand_recorder.
  */
-void recorder_destruct(struct sock *sk){
+static void recorder_destruct(struct sock *sk){
 	if (!sk->recorder){
 		printk("[recorder_destruct] sport = %hu, dport = %hu, recorder is NULL.\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		return;
@@ -73,7 +73,7 @@ void recorder_destruct(struct sock *sk){
 
 #define get_sc_q_idx(i) ((i) & (DERAND_SOCKCALL_PER_SOCK - 1))
 
-u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
+static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	struct derand_recorder* rec = sk->recorder;
 	struct derand_rec_sockcall *rec_sc;
 	int sc_id;
@@ -93,7 +93,7 @@ u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	return sc_id;
 }
 
-u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock, int flags, int *addr_len){
+static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock, int flags, int *addr_len){
 	struct derand_recorder* rec = sk->recorder;
 	struct derand_rec_sockcall *rec_sc;
 	int sc_id;
@@ -113,10 +113,26 @@ u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock, i
 	return sc_id;
 }
 
+#define get_evt_q_idx(i) ((i) & (DERAND_EVENT_PER_SOCK - 1))
+
+static void sockcall_lock(struct sock *sk, u32 sc_id){
+	struct derand_recorder* rec = sk->recorder;
+	u32 seq;
+
+	if (!rec)
+		return;
+	// get seq #
+	seq = rec->seq++;
+	// enqueue a new event
+	rec->evts[get_evt_q_idx(rec->evt_t)] = (struct derand_event){.seq = seq, .type = sc_id};
+	rec->evt_t++;
+}
+
 int bind_derand_ops(void){
 	derand_record_ops.recorder_destruct = recorder_destruct;
 	derand_record_ops.new_sendmsg = new_sendmsg;
 	derand_record_ops.new_recvmsg = new_recvmsg;
+	derand_record_ops.sockcall_lock = sockcall_lock;
 	/* The recorder_create functions must be bind last, because they are the enabler of record */
 	derand_record_ops.server_recorder_create = server_recorder_create;
 	derand_record_ops.client_recorder_create = client_recorder_create;
