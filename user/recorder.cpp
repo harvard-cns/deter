@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdio.h>
@@ -49,10 +50,10 @@ int main()
 
 				// start new
 				res[i].recorder_id = rec->recorder_id & (~0x1); // switch to the new socket's recording state
-				res[i].sip = rec->sip;
-				res[i].dip = rec->dip;
-				res[i].sport = rec->sport;
-				res[i].dport = rec->dport;
+				res[i].sip = ntohl(rec->sip);
+				res[i].dip = ntohl(rec->dip);
+				res[i].sport = ntohs(rec->sport);
+				res[i].dport = ntohs(rec->dport);
 			}
 
 			// if currently recording

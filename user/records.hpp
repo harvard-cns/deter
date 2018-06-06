@@ -16,6 +16,8 @@ public:
 
 	Records() : recorder_id(-1) {}
 	int dump(const char* filename = NULL);
+	int read(const char* filename);
+	void print(FILE* fout = stdout);
 	void clear();
 };
 
