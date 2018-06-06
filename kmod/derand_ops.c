@@ -94,7 +94,7 @@ static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 		return 0;
 
 	// get sockcall ID
-	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1 + DERAND_SOCK_ID_BASE;
+	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
 	// get record for storing this sockcall
 	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
 	// store data for this sockcall
@@ -114,7 +114,7 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 		return 0;
 
 	// get sockcall ID
-	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1 + DERAND_SOCK_ID_BASE;
+	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
 	// get record for storing this sockcall
 	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
 	// store data for this sockcall
@@ -139,7 +139,7 @@ static inline void new_event(struct derand_recorder *rec, u32 type){
 }
 
 static void sockcall_lock(struct sock *sk, u32 sc_id){
-	new_event(sk->recorder, sc_id);
+	new_event(sk->recorder, sc_id + DERAND_SOCK_ID_BASE);
 }
 
 /* incoming packets do not need to record their seq # */

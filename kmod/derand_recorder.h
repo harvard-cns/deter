@@ -35,7 +35,7 @@ struct derand_rec_sockcall{
 /* struct for each lock acquiring event */
 struct derand_event{
 	u32 seq;
-	u32 type; // 0: pkt; 1: tsq; 2~99: timeout types; 100 ~ inf: socket call IDs
+	u32 type; // 0: pkt; 1: tsq; 2~99: timeout types; 100 ~ inf: socket call IDs + 100
 };
 
 #define DERAND_EVENT_PER_SOCK 1024
