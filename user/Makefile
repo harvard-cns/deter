@@ -9,3 +9,6 @@ records.o: records.cpp records.hpp derand.h
 
 reader: reader.cpp records.o
 	g++ reader.cpp records.o -o reader -O3 -std=gnu++11
+
+clean_records:
+	sudo rm *:*'->'*:*
