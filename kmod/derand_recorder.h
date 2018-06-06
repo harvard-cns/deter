@@ -42,6 +42,9 @@ struct derand_event{
 #define DERAND_SOCKCALL_PER_SOCK 1024
 
 struct derand_recorder{
+	u32 sip, dip;
+	u16 sport, dport;
+	u32 recorder_id; // indicating how many sockets have used this recorder
 	u32 seq; // current seq #
 	atomic_t sockcall_id; // current socket call ID
 	u32 evt_h, evt_t;
@@ -49,5 +52,8 @@ struct derand_recorder{
 	u32 sc_h, sc_t;
 	struct derand_rec_sockcall sockcalls[DERAND_SOCKCALL_PER_SOCK]; // sockcall
 };
+
+#define get_sc_q_idx(i) ((i) & (DERAND_SOCKCALL_PER_SOCK - 1))
+#define get_evt_q_idx(i) ((i) & (DERAND_EVENT_PER_SOCK - 1))
 
 #endif /* _DERAND_RECORDER_H */

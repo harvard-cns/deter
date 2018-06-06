@@ -14,7 +14,7 @@ static void* derand_alloc_mem(void){
 		goto out;
 
 	n = derand_ctrl.stack[--derand_ctrl.top];
-	ret = derand_ctrl.addr + n * sizeof(struct derand_recorder);
+	ret = derand_ctrl.addr + n; // * sizeof(struct derand_recorder);
 out:
 	spin_unlock_bh(&derand_ctrl.lock);
 	return ret;
@@ -34,11 +34,18 @@ static void recorder_create(struct sock *sk){
 	printk("[recorder_create] sport = %hu, dport = %hu, succeed to create recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, derand_ctrl.top);
 	sk->recorder = rec;
 
+	// record 4 tuples
+	rec->sip = inet_sk(sk)->inet_saddr;
+	rec->dip = inet_sk(sk)->inet_daddr;
+	rec->sport = inet_sk(sk)->inet_sport;
+	rec->dport = inet_sk(sk)->inet_dport;
+
 	// init variables
 	rec->seq = 0;
 	atomic_set(&rec->sockcall_id, 0);
 	rec->evt_h = rec->evt_t = 0;
 	rec->sc_h = rec->sc_t = 0;
+	rec->recorder_id++;
 out:
 	return;
 }
@@ -56,25 +63,27 @@ static void client_recorder_create(struct sock *sk){
 	}
 }
 
-// recycle memory for a socket
-static void derand_recycle_mem(void* addr){
-	spin_lock_bh(&derand_ctrl.lock);
-	derand_ctrl.stack[derand_ctrl.top++] = (addr - derand_ctrl.addr) / sizeof(struct derand_recorder);
-	spin_unlock_bh(&derand_ctrl.lock);
-}
 /* destruct a derand_recorder.
  */
 static void recorder_destruct(struct sock *sk){
-	if (!sk->recorder){
+	struct derand_recorder* rec = sk->recorder;
+	if (!rec){
 		printk("[recorder_destruct] sport = %hu, dport = %hu, recorder is NULL.\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		return;
 	}
-	derand_recycle_mem(sk->recorder);
+
+	// update recorder_id
+	rec->recorder_id++;
+
+	// recycle this recorder
+	spin_lock_bh(&derand_ctrl.lock);
+	derand_ctrl.stack[derand_ctrl.top++] = (rec - derand_ctrl.addr); // / sizeof(struct derand_recorder);
+	spin_unlock_bh(&derand_ctrl.lock);
+
+	// remove the recorder from sk
 	sk->recorder = NULL;
 	printk("[recorder_destruct] sport = %hu, dport = %hu, succeed to destruct a recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, derand_ctrl.top);
 }
-
-#define get_sc_q_idx(i) ((i) & (DERAND_SOCKCALL_PER_SOCK - 1))
 
 static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	struct derand_recorder* rec = sk->recorder;
@@ -115,8 +124,6 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 	// return sockcall ID 
 	return sc_id;
 }
-
-#define get_evt_q_idx(i) ((i) & (DERAND_EVENT_PER_SOCK - 1))
 
 static inline void new_event(struct derand_recorder *rec, u32 type){
 	u32 seq;

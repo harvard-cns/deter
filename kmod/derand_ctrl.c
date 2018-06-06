@@ -34,9 +34,12 @@ int create_derand_ctrl(int max_sock){
 	int order = get_page_order(max_sock * sizeof(struct derand_recorder));
 
 	// allocate and reserve pages
-	derand_ctrl.addr = (void*)__get_free_pages(GFP_KERNEL, order);
+	derand_ctrl.addr = (struct derand_recorder*)__get_free_pages(GFP_KERNEL, order);
 	if (derand_ctrl.addr){
 		reserve_pages(virt_to_page(derand_ctrl.addr), 1<<order);
+		// mark not in use for all recorders
+		for (i = 0; i < max_sock; i++)
+			derand_ctrl.addr[i].recorder_id = -1;
 	}else 
 		goto fail_addr;
 
