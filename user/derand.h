@@ -37,8 +37,8 @@ struct derand_event{
 	uint32_t type; // 0: pkt; 1: tsq; 2~99: timeout types; 100 ~ inf: socket call IDs
 };
 
-#define DERAND_EVENT_PER_SOCK 65536
-#define DERAND_SOCKCALL_PER_SOCK 65536
+#define DERAND_EVENT_PER_SOCK 8192
+#define DERAND_SOCKCALL_PER_SOCK 8192
 
 struct atomic_t {
 	int counter;

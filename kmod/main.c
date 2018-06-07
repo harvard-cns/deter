@@ -15,7 +15,7 @@
 static int __init derand_init(void)
 {
 	// create derand_ctrl data
-	if (create_derand_ctrl(64))
+	if (create_derand_ctrl(16))
 		goto fail_create_ctrl;
 
 	// expose data to user space

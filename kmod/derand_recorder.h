@@ -38,8 +38,8 @@ struct derand_event{
 	u32 type; // 0: pkt; 1: tsq; 2~99: timeout types; 100 ~ inf: socket call IDs + 100
 };
 
-#define DERAND_EVENT_PER_SOCK 65536
-#define DERAND_SOCKCALL_PER_SOCK 65536
+#define DERAND_EVENT_PER_SOCK 8192
+#define DERAND_SOCKCALL_PER_SOCK 8192
 
 struct derand_recorder{
 	u32 sip, dip;

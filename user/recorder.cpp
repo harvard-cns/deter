@@ -14,7 +14,7 @@
 using namespace std;
 
 #define PAGE_SIZE (4*1024)
-#define N_RECORDER 64
+#define N_RECORDER 16
 
 inline uint64_t get_time(){
 	timespec ts;
