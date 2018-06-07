@@ -14,6 +14,7 @@
 using namespace std;
 
 #define PAGE_SIZE (4*1024)
+#define N_RECORDER 64
 
 inline uint64_t get_time(){
 	timespec ts;
@@ -24,16 +25,16 @@ inline uint64_t get_time(){
 int main()
 {
 	KernelMem kmem;
-	if (kmem.map_proc_exposed_mem("derand", 10 * sizeof(derand_recorder)))
+	if (kmem.map_proc_exposed_mem("derand", N_RECORDER * sizeof(derand_recorder)))
 		return -1;
 	derand_recorder* recorders = (derand_recorder*)kmem.buf;
-	vector<Records> res(10);
+	vector<Records> res(N_RECORDER);
 
 	// TODO: there are many potential concurrency bugs here
 	// Currently use a large recorder pool and FIFO recorder recycling to avoid the concurrency bugs
 	uint64_t next_t = get_time() / 1000;
 	while (1){
-		for (int i = 0; i < 10; i++){
+		for (int i = 0; i < N_RECORDER; i++){
 			derand_recorder* rec = recorders + i;
 
 			// if this recorder has changed to a new socket
