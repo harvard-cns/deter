@@ -80,7 +80,7 @@ int main()
 			}
 		}
 
-		#if 0
+		#if 1
 		// check if can sleep
 		next_t += 1000;
 		uint64_t now = get_time() / 1000;

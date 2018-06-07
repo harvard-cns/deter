@@ -165,6 +165,14 @@ static void tasklet(struct sock *sk){
 	new_event(sk->recorder, EVENT_TYPE_TASKLET);
 }
 
+static void read_jiffies(const struct sock *sk, unsigned long v, int id){
+	printk("jiffies: %d\n", id);
+}
+
+static void read_tcp_time_stamp(const struct sock *sk, u32 v, int id){
+	printk("tcp_time_stamp: %d\n", id);
+}
+
 int bind_derand_ops(void){
 	derand_record_ops.recorder_destruct = recorder_destruct;
 	derand_record_ops.new_sendmsg = new_sendmsg;
@@ -175,6 +183,8 @@ int bind_derand_ops(void){
 	derand_record_ops.delack_timer = delack_timer;
 	derand_record_ops.keepalive_timer = keepalive_timer;
 	derand_record_ops.tasklet = tasklet;
+	derand_record_ops.read_jiffies = read_jiffies;
+	derand_record_ops.read_tcp_time_stamp = read_tcp_time_stamp;
 
 	/* The recorder_create functions must be bind last, because they are the enabler of record */
 	derand_record_ops.server_recorder_create = server_recorder_create;
