@@ -1,3 +1,4 @@
+#include <cstring>
 #include "records.hpp"
 
 using namespace std;
@@ -38,6 +39,29 @@ int Records::dump(const char* filename){
 	if (!fwrite(&jiffies_reads[0], sizeof(jiffies_read) * len, 1, fout))
 		goto fail_write;
 
+	// write memory_pressures
+	len = memory_pressures.size();
+	if (!fwrite(&len, sizeof(len), 1, fout))
+		goto fail_write;
+	if (!fwrite(&memory_pressures[0], sizeof(uint32_t) * len, 1, fout))
+		goto fail_write;
+
+	// write n_memory_allocated;
+	if (!fwrite(&n_memory_allocated, sizeof(n_memory_allocated), 1, fout))
+		goto fail_write;
+
+	// write n_sockets_allocated
+	if (!fwrite(&n_sockets_allocated, sizeof(n_sockets_allocated), 1, fout))
+		goto fail_write;
+
+	// write mstamp
+	if (!fwrite(mstamp, sizeof(mstamp), 1, fout))
+		goto fail_write;
+
+	// write effect_bool
+	if (!fwrite(effect_bool, sizeof(effect_bool), 1, fout))
+		goto fail_write;
+
 	fclose(fout);
 	return 0;
 fail_write:
@@ -73,6 +97,29 @@ int Records::read(const char* filename){
 	if (!fread(&jiffies_reads[0], sizeof(jiffies_read) * len, 1, fin))
 		goto fail_read;
 
+	// read memory_pressures
+	if (!fread(&len, sizeof(len), 1, fin))
+		goto fail_read;
+	memory_pressures.resize(len);
+	if (!fread(&memory_pressures[0], sizeof(uint32_t) * len, 1, fin))
+		goto fail_read;
+
+	// read n_memory_allocated
+	if (!fread(&n_memory_allocated, sizeof(n_memory_allocated), 1, fin))
+		goto fail_read;
+	
+	// read n_sockets_allocated
+	if (!fread(&n_sockets_allocated, sizeof(n_sockets_allocated), 1, fin))
+		goto fail_read;
+
+	// read mstamp
+	if (!fread(mstamp, sizeof(mstamp), 1, fin))
+		goto fail_read;
+
+	// read effect_bool
+	if (!fread(effect_bool, sizeof(effect_bool), 1, fin))
+		goto fail_read;
+
 	fclose(fin);
 	return 0;
 fail_read:
@@ -104,9 +151,31 @@ void Records::print(FILE* fout){
 	for (int i = 0; i < 256; i++)
 		if (cnt[i] > 0)
 			fprintf(fout, "%d %d\n", i, cnt[i]);
+
+	fprintf(fout, "%lu memory_pressures read\n", memory_pressures.size());
+	for (int i = 0; i < memory_pressures.size(); i++)
+		fprintf(fout, "%08x\n", memory_pressures[i]);
+
+	fprintf(fout, "%u reads to memory_pressures\n", n_memory_allocated);
+
+	fprintf(fout, "%u reads to n_sockets_allocated\n", n_sockets_allocated);
+
+	fprintf(fout, "skb_mstamp_get:\n");
+	for (int i = 0; i < 16; i++)
+		fprintf(fout, "%d %u\n", i, mstamp[i]);
+
+	fprintf(fout, "effect_bool:\n");
+	for (int i = 0; i < 16; i++)
+		fprintf(fout, "%d %u\n", i, effect_bool[i]);
 }
 
 void Records::clear(){
 	evts.clear();
 	sockcalls.clear();
+	jiffies_reads.clear();
+	memory_pressures.clear();
+	n_memory_allocated = 0;
+	n_sockets_allocated = 0;
+	memset(mstamp, 0, sizeof(mstamp));
+	memset(effect_bool, 0 , sizeof(effect_bool));
 }

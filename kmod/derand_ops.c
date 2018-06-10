@@ -46,6 +46,11 @@ static void recorder_create(struct sock *sk){
 	rec->evt_h = rec->evt_t = 0;
 	rec->sc_h = rec->sc_t = 0;
 	rec->jf_h = rec->jf_t = 0;
+	rec->mpq.h = rec->mpq.t = 0;
+	rec->n_memory_allocated = 0;
+	rec->n_sockets_allocated = 0;
+	memset(rec->mstamp, 0, sizeof(rec->mstamp));
+	memset(rec->effect_bool, 0, sizeof(rec->effect_bool));
 	rec->recorder_id++;
 out:
 	return;
@@ -178,6 +183,34 @@ static void read_tcp_time_stamp(const struct sock *sk, u32 v, int id){
 	rec->jf_t++;
 }
 
+static void record_tcp_under_memory_pressure(const struct sock *sk, bool ret){
+	push_memory_pressure_q(&((struct derand_recorder*)(sk->recorder))->mpq, ret);
+}
+
+static void record_sk_under_memory_pressure(const struct sock *sk, bool ret){
+	push_memory_pressure_q(&((struct derand_recorder*)(sk->recorder))->mpq, ret);
+}
+
+static void record_sk_memory_allocated(const struct sock *sk, long ret){
+	struct derand_recorder *rec = sk->recorder;
+	rec->n_memory_allocated++;
+}
+
+static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){
+	struct derand_recorder *rec = sk->recorder;
+	rec->n_sockets_allocated++;
+}
+
+static void record_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int loc){
+	struct derand_recorder *rec = sk->recorder;
+	rec->mstamp[loc]++;
+}
+
+static void record_effect_bool(const struct sock *sk, int loc, bool v){
+	struct derand_recorder *rec = sk->recorder;
+	rec->effect_bool[loc]++;
+}
+
 int bind_derand_ops(void){
 	derand_record_ops.recorder_destruct = recorder_destruct;
 	derand_record_ops.new_sendmsg = new_sendmsg;
@@ -190,6 +223,12 @@ int bind_derand_ops(void){
 	derand_record_ops.tasklet = tasklet;
 	derand_record_ops.read_jiffies = read_jiffies;
 	derand_record_ops.read_tcp_time_stamp = read_tcp_time_stamp;
+	derand_record_ops.tcp_under_memory_pressure = record_tcp_under_memory_pressure;
+	derand_record_ops.sk_under_memory_pressure = record_sk_under_memory_pressure;
+	derand_record_ops.sk_memory_allocated = record_sk_memory_allocated;
+	derand_record_ops.sk_sockets_allocated_read_positive = record_sk_sockets_allocated_read_positive;
+	derand_record_ops.skb_mstamp_get = record_skb_mstamp_get;
+	derand_record_effect_bool = record_effect_bool;
 
 	/* The recorder_create functions must be bind last, because they are the enabler of record */
 	derand_record_ops.server_recorder_create = server_recorder_create;
@@ -197,5 +236,6 @@ int bind_derand_ops(void){
 	return 0;
 }
 void unbind_derand_ops(void){
+	derand_record_effect_bool = NULL;
 	derand_record_ops = derand_record_ops_default;
 }

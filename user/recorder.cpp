@@ -73,9 +73,23 @@ int main()
 				for (j = rec->jf_h; j < rec->jf_t; j++)
 					res[i].jiffies_reads.push_back(rec->jiffies_reads[get_jf_q_idx(j)]);
 				rec->jf_t = j;
+				// copy memory pressure
+				for (j = rec->mpq.h; j < (rec->mpq.t & (~31)); j += 32)
+					res[i].memory_pressures.push_back(rec->mpq.v[get_memory_pressure_q_idx(j) / 32]);
+				rec->mpq.h = j;
+
 
 				// if the socket's recorder has finished
 				if (rec->recorder_id - res[i].recorder_id == 1){
+					// copy the last few bits for memory pressure
+					if (rec->mpq.t & 31)
+						res[i].memory_pressures.push_back(rec->mpq.v[get_memory_pressure_q_idx(rec->mpq.t) / 32]);
+					// copy n_memory_allocated
+					res[i].n_memory_allocated = rec->n_memory_allocated;
+					res[i].n_sockets_allocated = rec->n_sockets_allocated;
+					memcpy(res[i].mstamp, rec->mstamp, sizeof(rec->mstamp));
+					memcpy(res[i].effect_bool, rec->effect_bool, sizeof(rec->effect_bool));
+
 					printf("%u %d\n", rec->evt_t, rec->sockcall_id.counter);
 					res[i].dump();
 					res[i].clear();

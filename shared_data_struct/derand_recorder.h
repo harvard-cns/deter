@@ -40,6 +40,23 @@ struct jiffies_read{
 	u8 id;
 };
 
+/* struct for memory pressure */
+#define DERAND_MEMORY_PRESSURE_PER_SOCK 8192
+struct memory_pressure_q{
+	u32 h, t;
+	u32 v[DERAND_MEMORY_PRESSURE_PER_SOCK / 32];
+};
+#define get_memory_pressure_q_idx(i) ((i) & (DERAND_MEMORY_PRESSURE_PER_SOCK - 1))
+static inline void push_memory_pressure_q(struct memory_pressure_q *q, bool v){
+	u32 idx = get_memory_pressure_q_idx(q->t);
+	u32 bit_idx = idx & 31, arr_idx = idx / 32;
+	q->t++;
+	if (bit_idx == 0)
+		q->v[arr_idx] = (u32)v;
+	else
+		q->v[arr_idx] |= ((u32)v) << bit_idx;
+}
+
 #define DERAND_EVENT_PER_SOCK 8192
 #define DERAND_SOCKCALL_PER_SOCK 8192
 #define DERAND_JIFFIES_PER_SOCK 8192
@@ -56,6 +73,11 @@ struct derand_recorder{
 	struct derand_rec_sockcall sockcalls[DERAND_SOCKCALL_PER_SOCK]; // sockcall
 	u16 jf_h, jf_t;
 	struct jiffies_read jiffies_reads[DERAND_JIFFIES_PER_SOCK];
+	struct memory_pressure_q mpq; // memory pressure
+	u32 n_memory_allocated;
+	u32 n_sockets_allocated;
+	u32 mstamp[16];
+	u32 effect_bool[16];
 };
 
 #define get_sc_q_idx(i) ((i) & (DERAND_SOCKCALL_PER_SOCK - 1))

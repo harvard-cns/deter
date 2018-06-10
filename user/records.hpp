@@ -14,6 +14,11 @@ public:
 	std::vector<derand_event> evts;
 	std::vector<derand_rec_sockcall> sockcalls;
 	std::vector<jiffies_read> jiffies_reads;
+	std::vector<uint32_t> memory_pressures;
+	uint32_t n_memory_allocated;
+	uint32_t n_sockets_allocated;
+	uint32_t mstamp[16];
+	uint32_t effect_bool[16];
 
 	Records() : recorder_id(-1) {}
 	int dump(const char* filename = NULL);
