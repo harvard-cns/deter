@@ -45,6 +45,7 @@ static void recorder_create(struct sock *sk){
 	atomic_set(&rec->sockcall_id, 0);
 	rec->evt_h = rec->evt_t = 0;
 	rec->sc_h = rec->sc_t = 0;
+	rec->jf_h = rec->jf_t = 0;
 	rec->recorder_id++;
 out:
 	return;
@@ -166,11 +167,15 @@ static void tasklet(struct sock *sk){
 }
 
 static void read_jiffies(const struct sock *sk, unsigned long v, int id){
-	printk("jiffies: %d\n", id);
+	struct derand_recorder *rec = sk->recorder;
+	rec->jiffies_reads[get_jf_q_idx(rec->jf_t)] = (struct jiffies_read){id + 100};
+	rec->jf_t++;
 }
 
 static void read_tcp_time_stamp(const struct sock *sk, u32 v, int id){
-	printk("tcp_time_stamp: %d\n", id);
+	struct derand_recorder *rec = sk->recorder;
+	rec->jiffies_reads[get_jf_q_idx(rec->jf_t)] = (struct jiffies_read){id};
+	rec->jf_t++;
 }
 
 int bind_derand_ops(void){
