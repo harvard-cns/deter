@@ -31,6 +31,13 @@ int Records::dump(const char* filename){
 	if (!fwrite(&sockcalls[0], sizeof(derand_rec_sockcall) * len, 1, fout))
 		goto fail_write;
 
+	// write jiffies_reads
+	len = jiffies_reads.size();
+	if (!fwrite(&len, sizeof(len), 1, fout))
+		goto fail_write;
+	if (!fwrite(&jiffies_reads[0], sizeof(jiffies_read) * len, 1, fout))
+		goto fail_write;
+
 	fclose(fout);
 	return 0;
 fail_write:
@@ -45,18 +52,25 @@ int Records::read(const char* filename){
 	if (!fread(&sip, sizeof(sip)+sizeof(dip)+sizeof(sport)+sizeof(dport), 1, fin))
 		goto fail_read;
 
-	// write events
+	// read events
 	if (!fread(&len, sizeof(len), 1, fin))
 		goto fail_read;
 	evts.resize(len);
 	if (!fread(&evts[0], sizeof(derand_event) * len, 1, fin))
 		goto fail_read;
 
-	// write sockcalls
+	// read sockcalls
 	if (!fread(&len, sizeof(len), 1, fin))
 		goto fail_read;
 	sockcalls.resize(len);
 	if (!fread(&sockcalls[0], sizeof(derand_rec_sockcall) * len, 1, fin))
+		goto fail_read;
+
+	// read jiffies_reads
+	if (!fread(&len, sizeof(len), 1, fin))
+		goto fail_read;
+	jiffies_reads.resize(len);
+	if (!fread(&jiffies_reads[0], sizeof(jiffies_read) * len, 1, fin))
 		goto fail_read;
 
 	fclose(fin);
@@ -81,6 +95,15 @@ void Records::print(FILE* fout){
 		derand_event &e = evts[i];
 		fprintf(fout, "%u %u\n", e.seq, e.type);
 	}
+	fprintf(fout, "%lu jiffies_reads\n", jiffies_reads.size());
+	int cnt[256] = {0};
+	for (int i = 0; i < jiffies_reads.size(); i++){
+		cnt[jiffies_reads[i].id]++;
+		//fprintf(fout, "%hhu\n", jiffies_reads[i].id);
+	}
+	for (int i = 0; i < 256; i++)
+		if (cnt[i] > 0)
+			fprintf(fout, "%d %d\n", i, cnt[i]);
 }
 
 void Records::clear(){

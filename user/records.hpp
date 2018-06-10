@@ -13,6 +13,7 @@ public:
 	uint16_t sport, dport;
 	std::vector<derand_event> evts;
 	std::vector<derand_rec_sockcall> sockcalls;
+	std::vector<jiffies_read> jiffies_reads;
 
 	Records() : recorder_id(-1) {}
 	int dump(const char* filename = NULL);

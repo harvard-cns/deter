@@ -69,6 +69,10 @@ int main()
 				for (j = rec->sc_h; j < rec->sockcall_id.counter; j++)
 					res[i].sockcalls.push_back(rec->sockcalls[get_sc_q_idx(j)]);
 				rec->sc_h = j;
+				// copy jiffies
+				for (j = rec->jf_h; j < rec->jf_t; j++)
+					res[i].jiffies_reads.push_back(rec->jiffies_reads[get_jf_q_idx(j)]);
+				rec->jf_t = j;
 
 				// if the socket's recorder has finished
 				if (rec->recorder_id - res[i].recorder_id == 1){
