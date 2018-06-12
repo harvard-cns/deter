@@ -57,13 +57,16 @@ out:
 }
 
 static void server_recorder_create(struct sock *sk){
-	if (inet_sk(sk)->inet_sport == 0x8913){ // port 5001
+	uint16_t sport = ntohs(inet_sk(sk)->inet_sport);
+	if ((sport >= 60000 && sport <= 60003) || sport == 50010){
 		printk("server sport = %hu, dport = %hu, creating recorder\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		recorder_create(sk);
 	}
 }
 static void client_recorder_create(struct sock *sk){
-	if (inet_sk(sk)->inet_dport == 0x8913){ // port 5001
+	uint16_t dport = ntohs(inet_sk(sk)->inet_dport);
+	if ((dport >= 60000 && dport <= 60003) || dport == 50010){
+	//if (inet_sk(sk)->inet_dport == 0x8913){ // port 5001
 		printk("client sport = %hu, dport = %hu, creating recorder\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		recorder_create(sk);
 	}
