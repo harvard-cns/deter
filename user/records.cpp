@@ -156,7 +156,7 @@ void Records::print(FILE* fout){
 	for (int i = 0; i < memory_pressures.size(); i++)
 		fprintf(fout, "%08x\n", memory_pressures[i]);
 
-	fprintf(fout, "%u reads to memory_pressures\n", n_memory_allocated);
+	fprintf(fout, "%u reads to memory_allocated\n", n_memory_allocated);
 
 	fprintf(fout, "%u reads to n_sockets_allocated\n", n_sockets_allocated);
 
