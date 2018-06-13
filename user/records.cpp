@@ -213,6 +213,7 @@ void Records::print_init_data(FILE* fout){
 	fprintf(fout, "rx_opt.snd_wscale = %u\n", d->rx_opt.snd_wscale);
 	fprintf(fout, "rx_opt.rcv_wscale = %u\n", d->rx_opt.rcv_wscale);
 	fprintf(fout, "rx_opt.mss_clamp = %u\n", d->rx_opt.mss_clamp);
+	fprintf(fout, "snd_cwnd_stamp = %u\n", d->snd_cwnd_stamp);
 	fprintf(fout, "rcv_wnd = %u\n", d->rcv_wnd);
 	fprintf(fout, "write_seq = %u\n", d->write_seq);
 	fprintf(fout, "pushed_seq = %u\n", d->pushed_seq);

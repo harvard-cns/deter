@@ -41,6 +41,7 @@ struct tcp_sock_init_data{
 				rcv_wscale : 4;	/* Window scaling to send to receiver	*/
 		u16	mss_clamp;	/* Maximal mss, negotiated at connection setup */
 	} rx_opt;
+	u32	snd_cwnd_stamp;
  	u32	rcv_wnd;	/* Current receiver window		*/
 	u32	write_seq;	/* Tail(+1) of data held in tcp send buffer */
 	u32	pushed_seq;	/* Last pushed seq, required to talk to windows */
