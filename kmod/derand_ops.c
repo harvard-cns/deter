@@ -3,6 +3,7 @@
 #include <net/derand_ops.h>
 #include "derand_ctrl.h"
 #include "derand_recorder.h"
+#include "copy_sock_init_val.h"
 
 // allocate memory for a socket
 static void* derand_alloc_mem(void){
@@ -61,6 +62,7 @@ static void server_recorder_create(struct sock *sk){
 	if ((sport >= 60000 && sport <= 60003) || sport == 50010){
 		printk("server sport = %hu, dport = %hu, creating recorder\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		recorder_create(sk);
+		server_sock_copy(sk); // copy sock init data
 	}
 }
 static void client_recorder_create(struct sock *sk){

@@ -11,6 +11,7 @@ public:
 	uint32_t recorder_id;
 	uint32_t sip, dip;
 	uint16_t sport, dport;
+	tcp_sock_init_data init_data;
 	std::vector<derand_event> evts;
 	std::vector<derand_rec_sockcall> sockcalls;
 	std::vector<jiffies_read> jiffies_reads;
@@ -24,6 +25,7 @@ public:
 	int dump(const char* filename = NULL);
 	int read(const char* filename);
 	void print(FILE* fout = stdout);
+	void print_init_data(FILE* fout = stdout);
 	void clear();
 };
 

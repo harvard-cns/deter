@@ -18,6 +18,10 @@ int Records::dump(const char* filename){
 	if (!fwrite(&sip, sizeof(sip)+sizeof(dip)+sizeof(sport)+sizeof(dport), 1, fout))
 		goto fail_write;
 
+	// write init_data
+	if (!fwrite(&init_data, sizeof(init_data), 1, fout))
+		goto fail_write;
+
 	// write events
 	len = evts.size();
 	if (!fwrite(&len, sizeof(len), 1, fout))
@@ -72,8 +76,12 @@ fail_write:
 int Records::read(const char* filename){
 	FILE* fin= fopen(filename, "r");
 	uint32_t len;
-	// write 4 tuples
+	// read 4 tuples
 	if (!fread(&sip, sizeof(sip)+sizeof(dip)+sizeof(sport)+sizeof(dport), 1, fin))
+		goto fail_read;
+
+	// read init_data
+	if (!fread(&init_data, sizeof(init_data), 1, fin))
 		goto fail_read;
 
 	// read events
@@ -167,6 +175,52 @@ void Records::print(FILE* fout){
 	fprintf(fout, "effect_bool:\n");
 	for (int i = 0; i < 16; i++)
 		fprintf(fout, "%d %u\n", i, effect_bool[i]);
+}
+
+void Records::print_init_data(FILE* fout){
+	tcp_sock_init_data *d = &init_data;
+	fprintf(fout, "tcp_header_len = %u\n", d->tcp_header_len);
+	fprintf(fout, "segs_in = %u\n", d->segs_in);
+	fprintf(fout, "rcv_nxt = %u\n", d->rcv_nxt);
+	fprintf(fout, "copied_seq = %u\n", d->copied_seq);
+	fprintf(fout, "rcv_wup = %u\n", d->rcv_wup);
+	fprintf(fout, "snd_nxt = %u\n", d->snd_nxt);
+	fprintf(fout, "snd_una = %u\n", d->snd_una);
+	fprintf(fout, "snd_sml = %u\n", d->snd_sml);
+	fprintf(fout, "lsndtime = %u\n", d->lsndtime);
+	fprintf(fout, "snd_wl1 = %u\n", d->snd_wl1);
+	fprintf(fout, "snd_wnd = %u\n", d->snd_wnd);
+	fprintf(fout, "max_window = %u\n", d->max_window);
+	fprintf(fout, "window_clamp = %u\n", d->window_clamp);
+	fprintf(fout, "rcv_ssthresh = %u\n", d->rcv_ssthresh);
+	fprintf(fout, "srtt_us = %u\n", d->srtt_us);
+	fprintf(fout, "mdev_us = %u\n", d->mdev_us);
+	fprintf(fout, "mdev_max_us = %u\n", d->mdev_max_us);
+	fprintf(fout, "rttvar_us = %u\n", d->rttvar_us);
+	fprintf(fout, "rtt_seq = %u\n", d->rtt_seq);
+	fprintf(fout, "rtt_min[0] = {%u,%u}\n", d->rtt_min[0].rtt, d->rtt_min[0].ts);
+	fprintf(fout, "rtt_min[1] = {%u,%u}\n", d->rtt_min[1].rtt, d->rtt_min[1].ts);
+	fprintf(fout, "rtt_min[2] = {%u,%u}\n", d->rtt_min[2].rtt, d->rtt_min[2].ts);
+	fprintf(fout, "ecn_flags = %u\n", d->ecn_flags);
+	fprintf(fout, "snd_up = %u\n", d->snd_up);
+	fprintf(fout, "rx_opt.ts_recent_stamp = %ld\n", d->rx_opt.ts_recent_stamp);
+	fprintf(fout, "rx_opt.ts_recent = %u\n", d->rx_opt.ts_recent);
+	fprintf(fout, "rx_opt.saw_tstamp = %u\n", d->rx_opt.saw_tstamp);
+	fprintf(fout, "rx_opt.tstamp_ok = %u\n", d->rx_opt.tstamp_ok);
+	fprintf(fout, "rx_opt.dsack = %u\n", d->rx_opt.dsack);
+	fprintf(fout, "rx_opt.wscale_ok = %u\n", d->rx_opt.wscale_ok);
+	fprintf(fout, "rx_opt.sack_ok = %u\n", d->rx_opt.sack_ok);
+	fprintf(fout, "rx_opt.snd_wscale = %u\n", d->rx_opt.snd_wscale);
+	fprintf(fout, "rx_opt.rcv_wscale = %u\n", d->rx_opt.rcv_wscale);
+	fprintf(fout, "rx_opt.mss_clamp = %u\n", d->rx_opt.mss_clamp);
+	fprintf(fout, "rcv_wnd = %u\n", d->rcv_wnd);
+	fprintf(fout, "write_seq = %u\n", d->write_seq);
+	fprintf(fout, "pushed_seq = %u\n", d->pushed_seq);
+	fprintf(fout, "total_retrans = %u\n", d->total_retrans);
+	fprintf(fout, "icsk_rto = %u\n", d->icsk_rto);
+	fprintf(fout, "icsk_ack.lrcvtime = %u\n", d->icsk_ack.lrcvtime);
+	fprintf(fout, "icsk_ack.last_seg_size = %u\n", d->icsk_ack.last_seg_size);
+	fprintf(fout, "sk_userlocks = %u\n", d->sk_userlocks);
 }
 
 void Records::clear(){

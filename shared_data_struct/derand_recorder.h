@@ -1,6 +1,8 @@
 #ifndef _SHARED_DATA_STRUCT__DERAND_RECORDER_H
 #define _SHARED_DATA_STRUCT__DERAND_RECORDER_H
 
+#include "tcp_sock_init_data.h"
+
 /* Different types of socket calls' ID starts with different highest 4 bits */
 #define DERAND_SOCK_ID_BASE 100
 
@@ -65,6 +67,7 @@ struct derand_recorder{
 	u32 sip, dip;
 	u16 sport, dport;
 	u32 recorder_id; // indicating how many sockets have used this recorder
+	struct tcp_sock_init_data init_data; // initial values for tcp_sock
 	u32 seq; // current seq #
 	atomic_t sockcall_id; // current socket call ID
 	u32 evt_h, evt_t;

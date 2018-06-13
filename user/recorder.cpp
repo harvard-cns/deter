@@ -55,6 +55,7 @@ int main()
 				res[i].dip = ntohl(rec->dip);
 				res[i].sport = ntohs(rec->sport);
 				res[i].dport = ntohs(rec->dport);
+				res[i].init_data = rec->init_data;
 			}
 
 			// if currently recording
