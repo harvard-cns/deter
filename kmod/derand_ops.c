@@ -114,6 +114,16 @@ static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	return sc_id;
 }
 
+#if 0
+static u32 new_sendpage(struct sock *sk, int offset, size_t size, int flags){
+	struct derand_recorder* rec = sk->recorder;
+	if (!rec)
+		return 0;
+	printk("[DERAND] %hu %hu: tcp_sendpage %d %lu %x!!!\n", ntohs(rec->sport), ntohs(rec->dport), offset, size, flags);
+	return 0;
+}
+#endif
+
 static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock, int flags, int *addr_len){
 	struct derand_recorder* rec = sk->recorder;
 	struct derand_rec_sockcall *rec_sc;
@@ -217,6 +227,7 @@ static void record_effect_bool(const struct sock *sk, int loc, bool v){
 int bind_derand_ops(void){
 	derand_record_ops.recorder_destruct = recorder_destruct;
 	derand_record_ops.new_sendmsg = new_sendmsg;
+	//derand_record_ops.new_sendpage = new_sendpage;
 	derand_record_ops.new_recvmsg = new_recvmsg;
 	derand_record_ops.sockcall_lock = sockcall_lock;
 	derand_record_ops.incoming_pkt = incoming_pkt;

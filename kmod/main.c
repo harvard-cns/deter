@@ -14,6 +14,7 @@
 
 static int __init derand_init(void)
 {
+	printk("%lu\n", sizeof(struct tcp_sock));
 	// create derand_ctrl data
 	if (create_derand_ctrl(16))
 		goto fail_create_ctrl;
