@@ -40,6 +40,7 @@ static inline void server_sock_copy(struct sock *sk){
 	d->rx_opt.snd_wscale = tp->rx_opt.snd_wscale;
 	d->rx_opt.rcv_wscale = tp->rx_opt.rcv_wscale;
 	d->rx_opt.mss_clamp = tp->rx_opt.mss_clamp;
+	d->snd_cwnd_stamp = tp->snd_cwnd_stamp;
  	d->rcv_wnd = tp->rcv_wnd;
 	d->write_seq = tp->write_seq;
 	d->pushed_seq = tp->pushed_seq;
