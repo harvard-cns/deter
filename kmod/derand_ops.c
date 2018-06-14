@@ -48,7 +48,7 @@ static void recorder_create(struct sock *sk){
 	rec->sc_h = rec->sc_t = 0;
 	rec->jf.h = rec->jf.t = rec->jf.idx_delta = rec->jf.last_jiffies = 0;
 	rec->mpq.h = rec->mpq.t = 0;
-	rec->n_memory_allocated = 0;
+	rec->maq.h = rec->maq.t = rec->maq.idx_delta = rec->maq.last_v = 0;
 	rec->n_sockets_allocated = 0;
 	memset(rec->mstamp, 0, sizeof(rec->mstamp));
 	memset(rec->effect_bool, 0, sizeof(rec->effect_bool));
@@ -213,8 +213,21 @@ static void record_sk_under_memory_pressure(const struct sock *sk, bool ret){
 }
 
 static void record_sk_memory_allocated(const struct sock *sk, long ret){
-	struct derand_recorder *rec = sk->recorder;
-	rec->n_memory_allocated++;
+	struct memory_allocated_q *maq = &((struct derand_recorder*)sk->recorder)->maq;
+	if (maq->t == 0){ // this is the first read to memory_allocated
+		maq->v[0].init_v = ret;
+		maq->last_v = ret;
+		maq->idx_delta = 0;
+		maq->t = 1;
+	}else if (ret != maq->last_v){
+		union memory_allocated_rec *ma_rec = &maq->v[get_memory_allocated_q_idx(maq->t)];
+		ma_rec->v_delta = (s32)(ret - maq->last_v);
+		ma_rec->idx_delta = maq->idx_delta + 1;
+		maq->last_v = ret;
+		maq->idx_delta = 0;
+		maq->t++;
+	}else 
+		maq->idx_delta++;
 }
 
 static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){

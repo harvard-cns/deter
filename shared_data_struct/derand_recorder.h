@@ -42,7 +42,7 @@ struct derand_event{
 union jiffies_rec{
 	unsigned long init_jiffies; // if this is the first jiffies read
 	struct {
-		u32 jiffies_delta;
+		s32 jiffies_delta;
 		u32 idx_delta;
 	};
 };
@@ -74,6 +74,24 @@ static inline void push_memory_pressure_q(struct memory_pressure_q *q, bool v){
 		q->v[arr_idx] |= ((u32)v) << bit_idx;
 }
 
+/* ============ memory_allocated ============ */
+#define DERAND_MEMORY_ALLOCATED_PER_SOCK 1024
+union memory_allocated_rec{
+	long init_v;
+	struct {
+		u32 v_delta;
+		u32 idx_delta;
+	};
+};
+/* struct for memory_allocated */
+struct memory_allocated_q{
+	long last_v;
+	u32 h, t;
+	u32 idx_delta;
+	union memory_allocated_rec v[DERAND_MEMORY_ALLOCATED_PER_SOCK];
+};
+#define get_memory_allocated_q_idx(i) ((i) & (DERAND_MEMORY_ALLOCATED_PER_SOCK - 1))
+
 #define DERAND_EVENT_PER_SOCK 8192
 #define DERAND_SOCKCALL_PER_SOCK 8192
 
@@ -90,7 +108,7 @@ struct derand_recorder{
 	struct derand_rec_sockcall sockcalls[DERAND_SOCKCALL_PER_SOCK]; // sockcall
 	struct jiffies_q jf; // jiffies
 	struct memory_pressure_q mpq; // memory pressure
-	u32 n_memory_allocated;
+	struct memory_allocated_q maq; // memory_allocated
 	u32 n_sockets_allocated;
 	u32 mstamp[16];
 	u32 effect_bool[16];

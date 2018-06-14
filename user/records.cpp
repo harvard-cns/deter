@@ -50,8 +50,11 @@ int Records::dump(const char* filename){
 	if (!fwrite(&memory_pressures[0], sizeof(uint32_t) * len, 1, fout))
 		goto fail_write;
 
-	// write n_memory_allocated;
-	if (!fwrite(&n_memory_allocated, sizeof(n_memory_allocated), 1, fout))
+	// write memory_allocated
+	len = memory_allocated.size();
+	if (!fwrite(&len, sizeof(len), 1, fout))
+		goto fail_write;
+	if (!fwrite(&memory_allocated[0], sizeof(memory_allocated_rec) * len, 1, fout))
 		goto fail_write;
 
 	// write n_sockets_allocated
@@ -112,8 +115,11 @@ int Records::read(const char* filename){
 	if (!fread(&memory_pressures[0], sizeof(uint32_t) * len, 1, fin))
 		goto fail_read;
 
-	// read n_memory_allocated
-	if (!fread(&n_memory_allocated, sizeof(n_memory_allocated), 1, fin))
+	// read memory_allocated
+	if (!fread(&len, sizeof(len), 1, fin))
+		goto fail_read;
+	memory_allocated.resize(len);
+	if (!fread(&memory_allocated[0], sizeof(memory_allocated_rec) * len, 1, fin))
 		goto fail_read;
 	
 	// read n_sockets_allocated
@@ -161,7 +167,12 @@ void Records::print(FILE* fout){
 	for (int i = 0; i < memory_pressures.size(); i++)
 		fprintf(fout, "%08x\n", memory_pressures[i]);
 
-	fprintf(fout, "%u reads to memory_allocated\n", n_memory_allocated);
+	fprintf(fout, "%lu new values of reading memory_allocated\n", memory_allocated.size());
+	if (memory_allocated.size() > 0){
+		fprintf(fout, "first: %lu\n", memory_allocated[0].init_v);
+		for (int i = 1; i < memory_allocated.size(); i++)
+			fprintf(fout, "%u %d\n", memory_allocated[i].idx_delta, memory_allocated[i].v_delta);
+	}
 
 	fprintf(fout, "%u reads to n_sockets_allocated\n", n_sockets_allocated);
 
@@ -226,7 +237,7 @@ void Records::clear(){
 	sockcalls.clear();
 	jiffies.clear();
 	memory_pressures.clear();
-	n_memory_allocated = 0;
+	memory_allocated.clear();
 	n_sockets_allocated = 0;
 	memset(mstamp, 0, sizeof(mstamp));
 	memset(effect_bool, 0 , sizeof(effect_bool));

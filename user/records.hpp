@@ -16,7 +16,7 @@ public:
 	std::vector<derand_rec_sockcall> sockcalls;
 	std::vector<jiffies_rec> jiffies;
 	std::vector<uint32_t> memory_pressures;
-	uint32_t n_memory_allocated;
+	std::vector<memory_allocated_rec> memory_allocated;
 	uint32_t n_sockets_allocated;
 	uint32_t mstamp[16];
 	uint32_t effect_bool[16];

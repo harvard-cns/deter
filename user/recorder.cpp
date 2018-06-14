@@ -78,15 +78,33 @@ int main()
 				for (j = rec->mpq.h; j < (rec->mpq.t & (~31)); j += 32)
 					res[i].memory_pressures.push_back(rec->mpq.v[get_memory_pressure_q_idx(j) / 32]);
 				rec->mpq.h = j;
-
+				// copy memory_allocated
+				for (j = rec->maq.h; j < rec->maq.t; j++)
+					res[i].memory_allocated.push_back(rec->maq.v[get_memory_allocated_q_idx(j)]);
+				rec->maq.h = j;
 
 				// if the socket's recorder has finished
 				if (rec->recorder_id - res[i].recorder_id == 1){
+					// record the last idx_delta for jiffies
+					if (rec->jf.idx_delta > 0){
+						jiffies_rec jf_rec;
+						jf_rec.jiffies_delta = 0;
+						jf_rec.idx_delta = rec->jf.idx_delta;
+						res[i].jiffies.push_back(jf_rec);
+					}
+
 					// copy the last few bits for memory pressure
 					if (rec->mpq.t & 31)
 						res[i].memory_pressures.push_back(rec->mpq.v[get_memory_pressure_q_idx(rec->mpq.t) / 32]);
-					// copy n_memory_allocated
-					res[i].n_memory_allocated = rec->n_memory_allocated;
+
+					// record the last idx_delta for memory_allocated
+					if (rec->maq.idx_delta > 0){
+						memory_allocated_rec ma_rec;
+						ma_rec.v_delta = 0;
+						ma_rec.idx_delta = rec->maq.idx_delta;
+						res[i].memory_allocated.push_back(ma_rec);
+					}
+
 					res[i].n_sockets_allocated = rec->n_sockets_allocated;
 					memcpy(res[i].mstamp, rec->mstamp, sizeof(rec->mstamp));
 					memcpy(res[i].effect_bool, rec->effect_bool, sizeof(rec->effect_bool));
