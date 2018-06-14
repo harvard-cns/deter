@@ -2,6 +2,7 @@
 #include <linux/mm.h>
 #include "record_ctrl.h"
 #include "derand_recorder.h"
+#include "mem_util.h"
 
 struct record_ctrl record_ctrl = {
 	.addr = NULL,
@@ -11,22 +12,6 @@ struct record_ctrl record_ctrl = {
 	.lock = __SPIN_LOCK_UNLOCKED()
 };
 
-int get_page_order(int n){
-	int order = 0;
-	while ((1<<order) * 4096 < n)
-		order++;
-	return order;
-}
-void reserve_pages(struct page* pg, int n_page){
-	struct page *end = pg + n_page;
-	for (; pg < end; pg++)
-		SetPageReserved(pg);
-}
-void unreserve_pages(struct page* pg, int n_page){
-	struct page *end = pg + n_page;
-	for (; pg < end; pg++)
-		ClearPageReserved(pg);
-}
 int create_record_ctrl(int max_sock){
 	int i;
 

@@ -1,7 +1,7 @@
 CONFIG_MODULE_SIG=n
 
 obj-m += derand_recorder.o derand_replayer.o
-derand_recorder-objs := recorder.o record_ctrl.o record_ops.o proc_expose.o record_user_share.o
+derand_recorder-objs := recorder.o record_ctrl.o record_ops.o proc_expose.o record_user_share.o mem_util.o
 derand_replayer-objs := replayer.o replay_ctrl.o proc_expose.o mem_util.o
 
 CURRENT_PATH := $(shell pwd)
