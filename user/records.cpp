@@ -37,10 +37,10 @@ int Records::dump(const char* filename){
 		goto fail_write;
 
 	// write jiffies_reads
-	len = jiffies_reads.size();
+	len = jiffies.size();
 	if (!fwrite(&len, sizeof(len), 1, fout))
 		goto fail_write;
-	if (!fwrite(&jiffies_reads[0], sizeof(jiffies_read) * len, 1, fout))
+	if (!fwrite(&jiffies[0], sizeof(jiffies_rec) * len, 1, fout))
 		goto fail_write;
 
 	// write memory_pressures
@@ -101,8 +101,8 @@ int Records::read(const char* filename){
 	// read jiffies_reads
 	if (!fread(&len, sizeof(len), 1, fin))
 		goto fail_read;
-	jiffies_reads.resize(len);
-	if (!fread(&jiffies_reads[0], sizeof(jiffies_read) * len, 1, fin))
+	jiffies.resize(len);
+	if (!fread(&jiffies[0], sizeof(jiffies_rec) * len, 1, fin))
 		goto fail_read;
 
 	// read memory_pressures
@@ -150,15 +150,12 @@ void Records::print(FILE* fout){
 		derand_event &e = evts[i];
 		fprintf(fout, "%u %u\n", e.seq, e.type);
 	}
-	fprintf(fout, "%lu jiffies_reads\n", jiffies_reads.size());
-	int cnt[256] = {0};
-	for (int i = 0; i < jiffies_reads.size(); i++){
-		cnt[jiffies_reads[i].id]++;
-		//fprintf(fout, "%hhu\n", jiffies_reads[i].id);
+	fprintf(fout, "%lu new jiffies\n", jiffies.size());
+	if (jiffies.size() > 0){
+		fprintf(fout, "first: %lu\n", jiffies[0].init_jiffies);
+		for (int i = 1; i < jiffies.size(); i++)
+			fprintf(fout, "%u %u\n", jiffies[i].idx_delta, jiffies[i].jiffies_delta);
 	}
-	for (int i = 0; i < 256; i++)
-		if (cnt[i] > 0)
-			fprintf(fout, "%d %d\n", i, cnt[i]);
 
 	fprintf(fout, "%lu memory_pressures read\n", memory_pressures.size());
 	for (int i = 0; i < memory_pressures.size(); i++)
@@ -227,7 +224,7 @@ void Records::print_init_data(FILE* fout){
 void Records::clear(){
 	evts.clear();
 	sockcalls.clear();
-	jiffies_reads.clear();
+	jiffies.clear();
 	memory_pressures.clear();
 	n_memory_allocated = 0;
 	n_sockets_allocated = 0;

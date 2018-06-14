@@ -46,7 +46,7 @@ static void recorder_create(struct sock *sk){
 	atomic_set(&rec->sockcall_id, 0);
 	rec->evt_h = rec->evt_t = 0;
 	rec->sc_h = rec->sc_t = 0;
-	rec->jf_h = rec->jf_t = 0;
+	rec->jf.h = rec->jf.t = rec->jf.idx_delta = rec->jf.last_jiffies = 0;
 	rec->mpq.h = rec->mpq.t = 0;
 	rec->n_memory_allocated = 0;
 	rec->n_sockets_allocated = 0;
@@ -187,15 +187,21 @@ static void tasklet(struct sock *sk){
 }
 
 static void read_jiffies(const struct sock *sk, unsigned long v, int id){
-	struct derand_recorder *rec = sk->recorder;
-	rec->jiffies_reads[get_jf_q_idx(rec->jf_t)] = (struct jiffies_read){id + 100};
-	rec->jf_t++;
-}
-
-static void read_tcp_time_stamp(const struct sock *sk, u32 v, int id){
-	struct derand_recorder *rec = sk->recorder;
-	rec->jiffies_reads[get_jf_q_idx(rec->jf_t)] = (struct jiffies_read){id};
-	rec->jf_t++;
+	struct jiffies_q *jf = &((struct derand_recorder*)sk->recorder)->jf;
+	if (jf->t == 0){ // this is the first jiffies read
+		jf->v[0].init_jiffies = v;
+		jf->last_jiffies = v;
+		jf->idx_delta = 0;
+		jf->t = 1;
+	}else if (v != jf->last_jiffies) {
+		union jiffies_rec *jf_rec = &jf->v[get_jiffies_q_idx(jf->t)];
+		jf_rec->jiffies_delta = v - jf->last_jiffies;
+		jf_rec->idx_delta = jf->idx_delta + 1;
+		jf->last_jiffies = v;
+		jf->idx_delta = 0;
+		jf->t++;
+	}else
+		jf->idx_delta++;
 }
 
 static void record_tcp_under_memory_pressure(const struct sock *sk, bool ret){
@@ -238,7 +244,7 @@ int bind_derand_ops(void){
 	derand_record_ops.keepalive_timer = keepalive_timer;
 	derand_record_ops.tasklet = tasklet;
 	derand_record_ops.read_jiffies = read_jiffies;
-	derand_record_ops.read_tcp_time_stamp = read_tcp_time_stamp;
+	derand_record_ops.read_tcp_time_stamp = read_jiffies; // store jiffies and tcp_time_stamp together
 	derand_record_ops.tcp_under_memory_pressure = record_tcp_under_memory_pressure;
 	derand_record_ops.sk_under_memory_pressure = record_sk_under_memory_pressure;
 	derand_record_ops.sk_memory_allocated = record_sk_memory_allocated;

@@ -71,9 +71,9 @@ int main()
 					res[i].sockcalls.push_back(rec->sockcalls[get_sc_q_idx(j)]);
 				rec->sc_h = j;
 				// copy jiffies
-				for (j = rec->jf_h; j < rec->jf_t; j++)
-					res[i].jiffies_reads.push_back(rec->jiffies_reads[get_jf_q_idx(j)]);
-				rec->jf_t = j;
+				for (j = rec->jf.h; j < rec->jf.t; j++)
+					res[i].jiffies.push_back(rec->jf.v[get_jiffies_q_idx(j)]);
+				rec->jf.h = j;
 				// copy memory pressure
 				for (j = rec->mpq.h; j < (rec->mpq.t & (~31)); j += 32)
 					res[i].memory_pressures.push_back(rec->mpq.v[get_memory_pressure_q_idx(j) / 32]);

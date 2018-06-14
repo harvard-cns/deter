@@ -37,13 +37,28 @@ struct derand_event{
 	u32 type; // 0: pkt; 1: tsq; 2~99: timeout types; 100 ~ inf: socket call IDs + 100
 };
 
-/* struct for jiffies read */
-struct jiffies_read{
-	u8 id;
+/* ============= jiffies ============= */
+/* struct for a jiffies read with new value */
+union jiffies_rec{
+	unsigned long init_jiffies; // if this is the first jiffies read
+	struct {
+		u32 jiffies_delta;
+		u32 idx_delta;
+	};
 };
 
-/* struct for memory pressure */
+#define DERAND_JIFFIES_PER_SOCK 1024 
+struct jiffies_q{
+	unsigned long last_jiffies; // the last jiffies value
+	u32 h, t;
+	u32 idx_delta;
+	union jiffies_rec v[DERAND_JIFFIES_PER_SOCK];
+};
+#define get_jiffies_q_idx(i) ((i) & (DERAND_JIFFIES_PER_SOCK - 1))
+
+/* ============= memory pressure ============ */
 #define DERAND_MEMORY_PRESSURE_PER_SOCK 8192
+/* struct for memory pressure */
 struct memory_pressure_q{
 	u32 h, t;
 	u32 v[DERAND_MEMORY_PRESSURE_PER_SOCK / 32];
@@ -61,7 +76,6 @@ static inline void push_memory_pressure_q(struct memory_pressure_q *q, bool v){
 
 #define DERAND_EVENT_PER_SOCK 8192
 #define DERAND_SOCKCALL_PER_SOCK 8192
-#define DERAND_JIFFIES_PER_SOCK 8192
 
 struct derand_recorder{
 	u32 sip, dip;
@@ -74,8 +88,7 @@ struct derand_recorder{
 	struct derand_event evts[DERAND_EVENT_PER_SOCK]; // sequence of derand_event
 	u32 sc_h, sc_t;
 	struct derand_rec_sockcall sockcalls[DERAND_SOCKCALL_PER_SOCK]; // sockcall
-	u16 jf_h, jf_t;
-	struct jiffies_read jiffies_reads[DERAND_JIFFIES_PER_SOCK];
+	struct jiffies_q jf; // jiffies
 	struct memory_pressure_q mpq; // memory pressure
 	u32 n_memory_allocated;
 	u32 n_sockets_allocated;
@@ -85,6 +98,5 @@ struct derand_recorder{
 
 #define get_sc_q_idx(i) ((i) & (DERAND_SOCKCALL_PER_SOCK - 1))
 #define get_evt_q_idx(i) ((i) & (DERAND_EVENT_PER_SOCK - 1))
-#define get_jf_q_idx(i) ((i) & (DERAND_JIFFIES_PER_SOCK - 1))
 
 #endif /* _SHARED_DATA_STRUCT__DERAND_RECORDER_H */
