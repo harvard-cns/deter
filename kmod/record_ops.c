@@ -1,7 +1,7 @@
 #include <net/tcp.h>
 #include <net/derand.h>
 #include <net/derand_ops.h>
-#include "derand_ctrl.h"
+#include "record_ctrl.h"
 #include "derand_recorder.h"
 #include "copy_sock_init_val.h"
 
@@ -10,14 +10,14 @@ static void* derand_alloc_mem(void){
 	void* ret = NULL;
 	int n;
 
-	spin_lock_bh(&derand_ctrl.lock);
-	if (derand_ctrl.top == 0)
+	spin_lock_bh(&record_ctrl.lock);
+	if (record_ctrl.top == 0)
 		goto out;
 
-	n = derand_ctrl.stack[--derand_ctrl.top];
-	ret = derand_ctrl.addr + n; // * sizeof(struct derand_recorder);
+	n = record_ctrl.stack[--record_ctrl.top];
+	ret = record_ctrl.addr + n; // * sizeof(struct derand_recorder);
 out:
-	spin_unlock_bh(&derand_ctrl.lock);
+	spin_unlock_bh(&record_ctrl.lock);
 	return ret;
 }
 
@@ -31,10 +31,10 @@ static void recorder_create(struct sock *sk, int server_side){
 	// create derand_recorder
 	struct derand_recorder *rec = derand_alloc_mem();
 	if (!rec){
-		printk("[recorder_create] sport = %hu, dport = %hu, fail to create recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, derand_ctrl.top);
+		printk("[recorder_create] sport = %hu, dport = %hu, fail to create recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, record_ctrl.top);
 		goto out;
 	}
-	printk("[recorder_create] sport = %hu, dport = %hu, succeed to create recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, derand_ctrl.top);
+	printk("[recorder_create] sport = %hu, dport = %hu, succeed to create recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, record_ctrl.top);
 	sk->recorder = rec;
 
 	// record 4 tuples
@@ -91,13 +91,13 @@ static void recorder_destruct(struct sock *sk){
 	rec->recorder_id++;
 
 	// recycle this recorder
-	spin_lock_bh(&derand_ctrl.lock);
-	derand_ctrl.stack[derand_ctrl.top++] = (rec - derand_ctrl.addr); // / sizeof(struct derand_recorder);
-	spin_unlock_bh(&derand_ctrl.lock);
+	spin_lock_bh(&record_ctrl.lock);
+	record_ctrl.stack[record_ctrl.top++] = (rec - record_ctrl.addr); // / sizeof(struct derand_recorder);
+	spin_unlock_bh(&record_ctrl.lock);
 
 	// remove the recorder from sk
 	sk->recorder = NULL;
-	printk("[recorder_destruct] sport = %hu, dport = %hu, succeed to destruct a recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, derand_ctrl.top);
+	printk("[recorder_destruct] sport = %hu, dport = %hu, succeed to destruct a recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, record_ctrl.top);
 }
 
 static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
@@ -249,7 +249,7 @@ static void record_effect_bool(const struct sock *sk, int loc, bool v){
 	push_effect_bool_q(&((struct derand_recorder*)sk->recorder)->ebq[loc], v);
 }
 
-int bind_derand_ops(void){
+int bind_record_ops(void){
 	derand_record_ops.recorder_destruct = recorder_destruct;
 	derand_record_ops.new_sendmsg = new_sendmsg;
 	//derand_record_ops.new_sendpage = new_sendpage;
@@ -274,7 +274,7 @@ int bind_derand_ops(void){
 	derand_record_ops.client_recorder_create = client_recorder_create;
 	return 0;
 }
-void unbind_derand_ops(void){
+void unbind_record_ops(void){
 	derand_record_effect_bool = NULL;
 	derand_record_ops = derand_record_ops_default;
 }

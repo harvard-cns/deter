@@ -8,48 +8,48 @@
 #include <linux/time.h>
 #include <linux/tcp.h>
 
-#include "derand_ctrl.h"
-#include "derand_ops.h"
-#include "derand_user_share.h"
+#include "record_ctrl.h"
+#include "record_ops.h"
+#include "record_user_share.h"
 
-static int __init derand_init(void)
+static int __init record_init(void)
 {
-	// create derand_ctrl data
-	if (create_derand_ctrl(16))
+	// create record_ctrl data
+	if (create_record_ctrl(16))
 		goto fail_create_ctrl;
 
 	// expose data to user space
 	if (share_mem_to_user())
 		goto fail_share;
 
-	// bind derand_ops to kernel stack
-	if (bind_derand_ops())
+	// bind record_ops to kernel stack
+	if (bind_record_ops())
 		goto fail_bind_ops;
 	return 0;
 	
 fail_bind_ops:
 	stop_share_mem_to_user();
 fail_share:
-	delete_derand_ctrl();
+	delete_record_ctrl();
 fail_create_ctrl:
 	return -1;
 }
 
-static void __exit derand_exit(void)
+static void __exit record_exit(void)
 {
-	// unbind derand_ops
-	unbind_derand_ops();
+	// unbind record_ops
+	unbind_record_ops();
 
 	// stop exposing data to user space
 	stop_share_mem_to_user();
 	
-	// remove derand_ctrl data
-	delete_derand_ctrl();
+	// remove record_ctrl data
+	delete_record_ctrl();
 }
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Yuliang Li");
-MODULE_DESCRIPTION("derand");
+MODULE_DESCRIPTION("derand recorder");
 
-module_init(derand_init);
-module_exit(derand_exit);
+module_init(record_init);
+module_exit(record_exit);
