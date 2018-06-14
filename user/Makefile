@@ -1,3 +1,4 @@
+all: recorder reader replayer
 recorder : recorder.cpp mem_share.o records.o derand.h ../shared_data_struct/derand_recorder.h
 	g++ recorder.cpp mem_share.o records.o -o recorder -O3 -std=gnu++11
 
@@ -9,6 +10,9 @@ records.o: records.cpp records.hpp derand.h ../shared_data_struct/derand_recorde
 
 reader: reader.cpp records.o
 	g++ reader.cpp records.o -o reader -O3 -std=gnu++11
+
+replayer: replayer.cpp
+	g++ replayer.cpp -o replayer -O3 -std=gnu++11
 
 clean_records:
 	sudo rm *:*'->'*:*

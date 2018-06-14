@@ -40,13 +40,14 @@ static ssize_t proc_##name##_read(struct file* file, char __user *buf, size_t le
 static ssize_t proc_##name##_write(struct file* file, const char *buf, size_t len, loff_t *ppos){ \
 	char s[32]; \
 	int ret; \
-	if (len > 32){ \
+	if (len > 32 - 1){ \
 		printk("error: proc_"#name"_expose cannot accept %lu bytes write\n", len); \
 		return 0; \
 	} \
 	if (!proc_##name##_expose.input_func) \
 		return 0; \
 	copy_from_user(s, buf, len); \
+	s[len] = 0; \
 	ret = proc_##name##_expose.input_func(proc_##name##_expose.data, s, len); \
 	return ret; \
 }
