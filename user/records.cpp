@@ -47,12 +47,8 @@ int Records::dump(const char* filename){
 			goto fail_write;
 
 	// write memory_pressures
-	len = memory_pressures.size();
-	if (!fwrite(&len, sizeof(len), 1, fout))
+	if (!memory_pressures.dump(fout))
 		goto fail_write;
-	if (len > 0)
-		if (!fwrite(&memory_pressures[0], sizeof(uint32_t) * len, 1, fout))
-			goto fail_write;
 
 	// write memory_allocated
 	len = memory_allocated.size();
@@ -75,8 +71,9 @@ int Records::dump(const char* filename){
 			goto fail_write;
 
 	// write effect_bool
-	if (!fwrite(effect_bool, sizeof(effect_bool), 1, fout))
-		goto fail_write;
+	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
+		if (!effect_bool[i].dump(fout))
+			goto fail_write;
 
 	fclose(fout);
 	return 0;
@@ -121,12 +118,8 @@ int Records::read(const char* filename){
 			goto fail_read;
 
 	// read memory_pressures
-	if (!fread(&len, sizeof(len), 1, fin))
+	if (!memory_pressures.read(fin))
 		goto fail_read;
-	memory_pressures.resize(len);
-	if (len > 0)
-		if (!fread(&memory_pressures[0], sizeof(uint32_t) * len, 1, fin))
-			goto fail_read;
 
 	// read memory_allocated
 	if (!fread(&len, sizeof(len), 1, fin))
@@ -149,8 +142,9 @@ int Records::read(const char* filename){
 			goto fail_read;
 
 	// read effect_bool
-	if (!fread(effect_bool, sizeof(effect_bool), 1, fin))
-		goto fail_read;
+	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
+		if (!effect_bool[i].read(fin))
+			goto fail_read;
 
 	fclose(fin);
 	return 0;
@@ -181,9 +175,9 @@ void Records::print(FILE* fout){
 			fprintf(fout, "%u %u\n", jiffies[i].idx_delta, jiffies[i].jiffies_delta);
 	}
 
-	fprintf(fout, "%lu memory_pressures read\n", memory_pressures.size());
-	for (int i = 0; i < memory_pressures.size(); i++)
-		fprintf(fout, "%08x\n", memory_pressures[i]);
+	fprintf(fout, "%u memory_pressures read %lu\n", memory_pressures.n, memory_pressures.v.size());
+	for (int i = 0; i < memory_pressures.v.size(); i++)
+		fprintf(fout, "%08x\n", memory_pressures.v[i]);
 
 	fprintf(fout, "%lu new values of reading memory_allocated\n", memory_allocated.size());
 	if (memory_allocated.size() > 0){
@@ -198,9 +192,15 @@ void Records::print(FILE* fout){
 	for (int64_t i = 0; i < mstamp.size(); i++)
 		fprintf(fout, "%u %u\n", mstamp[i].stamp_us, mstamp[i].stamp_jiffies);
 
-	fprintf(fout, "effect_bool:\n");
-	for (int i = 0; i < 16; i++)
-		fprintf(fout, "%d %u\n", i, effect_bool[i]);
+	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
+		auto &eb = effect_bool[i];
+		fprintf(fout, "effect_bool %d: %u reads %lu\n", i, eb.n, eb.v.size());
+		for (int j = 0; j < eb.v.size(); j++){
+			for (uint32_t k = 0, b = eb.v[j]; k < 32; k++, b>>=1)
+				fprintf(fout, "%u", b & 1);
+			fprintf(fout, "\n");
+		}
+	}
 }
 
 void Records::print_init_data(FILE* fout){
@@ -258,5 +258,6 @@ void Records::clear(){
 	memory_allocated.clear();
 	n_sockets_allocated = 0;
 	mstamp.clear();
-	memset(effect_bool, 0 , sizeof(effect_bool));
+	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
+		effect_bool[i].clear();
 }

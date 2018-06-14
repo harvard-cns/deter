@@ -26,6 +26,8 @@ out:
  * i.e., after receiving SYN-ACK at client and after receiving ACK at server.
  * So this function is called in bottom-half, so we must not block*/
 static void recorder_create(struct sock *sk){
+	int i;
+
 	// create derand_recorder
 	struct derand_recorder *rec = derand_alloc_mem();
 	if (!rec){
@@ -51,7 +53,8 @@ static void recorder_create(struct sock *sk){
 	rec->maq.h = rec->maq.t = rec->maq.idx_delta = rec->maq.last_v = 0;
 	rec->n_sockets_allocated = 0;
 	rec->msq.h = rec->msq.t = 0;
-	memset(rec->effect_bool, 0, sizeof(rec->effect_bool));
+	for (i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
+		rec->ebq[i].h = rec->ebq[i].t = 0;
 	rec->recorder_id++;
 out:
 	return;
@@ -242,8 +245,7 @@ static void record_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int lo
 }
 
 static void record_effect_bool(const struct sock *sk, int loc, bool v){
-	struct derand_recorder *rec = sk->recorder;
-	rec->effect_bool[loc]++;
+	push_effect_bool_q(&((struct derand_recorder*)sk->recorder)->ebq[loc], v);
 }
 
 int bind_derand_ops(void){

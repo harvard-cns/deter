@@ -108,8 +108,28 @@ struct mstamp_q{
 };
 #define get_mstamp_q_idx(i) ((i) & (DERAND_MSTAMP_PER_SOCK - 1))
 
+/****************************************
+ * effect_bool
+ ****************************************/
+#define DERAND_EFFECT_BOOL_PER_SOCK 2048
+struct effect_bool_q{
+	u32 h, t;
+	u32 v[DERAND_EFFECT_BOOL_PER_SOCK / 32];
+};
+#define get_effect_bool_q_idx(i) ((i) & (DERAND_EFFECT_BOOL_PER_SOCK - 1))
+static inline void push_effect_bool_q(struct effect_bool_q *q, bool v){
+	u32 idx = get_effect_bool_q_idx(q->t);
+	u32 bit_idx = idx & 31, arr_idx = idx / 32;
+	q->t++;
+	if (bit_idx == 0)
+		q->v[arr_idx] = (u32)v;
+	else
+		q->v[arr_idx] |= ((u32)v) << bit_idx;
+}
+
 #define DERAND_EVENT_PER_SOCK 4096
 #define DERAND_SOCKCALL_PER_SOCK 4096
+#define DERAND_EFFECT_BOOL_N_LOC 16
 
 struct derand_recorder{
 	u32 sip, dip;
@@ -127,7 +147,7 @@ struct derand_recorder{
 	struct memory_allocated_q maq; // memory_allocated
 	u32 n_sockets_allocated;
 	struct mstamp_q msq; // skb_mstamp
-	u32 effect_bool[16];
+	struct effect_bool_q ebq[DERAND_EFFECT_BOOL_N_LOC]; // effect_bool
 };
 
 #define get_sc_q_idx(i) ((i) & (DERAND_SOCKCALL_PER_SOCK - 1))
