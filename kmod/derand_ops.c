@@ -50,7 +50,7 @@ static void recorder_create(struct sock *sk){
 	rec->mpq.h = rec->mpq.t = 0;
 	rec->maq.h = rec->maq.t = rec->maq.idx_delta = rec->maq.last_v = 0;
 	rec->n_sockets_allocated = 0;
-	memset(rec->mstamp, 0, sizeof(rec->mstamp));
+	rec->msq.h = rec->msq.t = 0;
 	memset(rec->effect_bool, 0, sizeof(rec->effect_bool));
 	rec->recorder_id++;
 out:
@@ -236,8 +236,9 @@ static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){
 }
 
 static void record_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int loc){
-	struct derand_recorder *rec = sk->recorder;
-	rec->mstamp[loc]++;
+	struct mstamp_q *msq = &((struct derand_recorder*)sk->recorder)->msq;
+	msq->v[get_mstamp_q_idx(msq->t)] = *cl;
+	msq->t++;
 }
 
 static void record_effect_bool(const struct sock *sk, int loc, bool v){

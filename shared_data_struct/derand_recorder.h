@@ -37,7 +37,9 @@ struct derand_event{
 	u32 type; // 0: pkt; 1: tsq; 2~99: timeout types; 100 ~ inf: socket call IDs + 100
 };
 
-/* ============= jiffies ============= */
+/************************************
+ * jiffies
+ ***********************************/
 /* struct for a jiffies read with new value */
 union jiffies_rec{
 	unsigned long init_jiffies; // if this is the first jiffies read
@@ -56,7 +58,9 @@ struct jiffies_q{
 };
 #define get_jiffies_q_idx(i) ((i) & (DERAND_JIFFIES_PER_SOCK - 1))
 
-/* ============= memory pressure ============ */
+/*************************************
+ * memory_pressure
+ ************************************/
 #define DERAND_MEMORY_PRESSURE_PER_SOCK 8192
 /* struct for memory pressure */
 struct memory_pressure_q{
@@ -74,7 +78,9 @@ static inline void push_memory_pressure_q(struct memory_pressure_q *q, bool v){
 		q->v[arr_idx] |= ((u32)v) << bit_idx;
 }
 
-/* ============ memory_allocated ============ */
+/*************************************
+ * memory_allocated
+ ************************************/
 #define DERAND_MEMORY_ALLOCATED_PER_SOCK 1024
 union memory_allocated_rec{
 	long init_v;
@@ -92,8 +98,18 @@ struct memory_allocated_q{
 };
 #define get_memory_allocated_q_idx(i) ((i) & (DERAND_MEMORY_ALLOCATED_PER_SOCK - 1))
 
-#define DERAND_EVENT_PER_SOCK 8192
-#define DERAND_SOCKCALL_PER_SOCK 8192
+/****************************************
+ * skb_mstamp
+ ***************************************/
+#define DERAND_MSTAMP_PER_SOCK 4096
+struct mstamp_q{
+	u32 h, t;
+	struct skb_mstamp v[DERAND_MSTAMP_PER_SOCK];
+};
+#define get_mstamp_q_idx(i) ((i) & (DERAND_MSTAMP_PER_SOCK - 1))
+
+#define DERAND_EVENT_PER_SOCK 4096
+#define DERAND_SOCKCALL_PER_SOCK 4096
 
 struct derand_recorder{
 	u32 sip, dip;
@@ -110,7 +126,7 @@ struct derand_recorder{
 	struct memory_pressure_q mpq; // memory pressure
 	struct memory_allocated_q maq; // memory_allocated
 	u32 n_sockets_allocated;
-	u32 mstamp[16];
+	struct mstamp_q msq; // skb_mstamp
 	u32 effect_bool[16];
 };
 

@@ -18,7 +18,7 @@ public:
 	std::vector<uint32_t> memory_pressures;
 	std::vector<memory_allocated_rec> memory_allocated;
 	uint32_t n_sockets_allocated;
-	uint32_t mstamp[16];
+	std::vector<skb_mstamp> mstamp;
 	uint32_t effect_bool[16];
 
 	Records() : recorder_id(-1) {}

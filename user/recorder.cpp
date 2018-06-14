@@ -82,6 +82,10 @@ int main()
 				for (j = rec->maq.h; j < rec->maq.t; j++)
 					res[i].memory_allocated.push_back(rec->maq.v[get_memory_allocated_q_idx(j)]);
 				rec->maq.h = j;
+				// copy mstamp
+				for (j = rec->msq.h; j < rec->msq.t; j++)
+					res[i].mstamp.push_back(rec->msq.v[get_mstamp_q_idx(j)]);
+				rec->msq.h = j;
 
 				// if the socket's recorder has finished
 				if (rec->recorder_id - res[i].recorder_id == 1){
@@ -106,7 +110,6 @@ int main()
 					}
 
 					res[i].n_sockets_allocated = rec->n_sockets_allocated;
-					memcpy(res[i].mstamp, rec->mstamp, sizeof(rec->mstamp));
 					memcpy(res[i].effect_bool, rec->effect_bool, sizeof(rec->effect_bool));
 
 					printf("%u %d\n", rec->evt_t, rec->sockcall_id.counter);

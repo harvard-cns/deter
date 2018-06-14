@@ -26,44 +26,53 @@ int Records::dump(const char* filename){
 	len = evts.size();
 	if (!fwrite(&len, sizeof(len), 1, fout))
 		goto fail_write;
-	if (!fwrite(&evts[0], sizeof(derand_event) * len, 1, fout))
-		goto fail_write;
+	if (len > 0)
+		if (!fwrite(&evts[0], sizeof(derand_event) * len, 1, fout))
+			goto fail_write;
 
 	// write sockcalls
 	len = sockcalls.size();
 	if (!fwrite(&len, sizeof(len), 1, fout))
 		goto fail_write;
-	if (!fwrite(&sockcalls[0], sizeof(derand_rec_sockcall) * len, 1, fout))
-		goto fail_write;
+	if (len > 0)
+		if (!fwrite(&sockcalls[0], sizeof(derand_rec_sockcall) * len, 1, fout))
+			goto fail_write;
 
 	// write jiffies_reads
 	len = jiffies.size();
 	if (!fwrite(&len, sizeof(len), 1, fout))
 		goto fail_write;
-	if (!fwrite(&jiffies[0], sizeof(jiffies_rec) * len, 1, fout))
-		goto fail_write;
+	if (len > 0)
+		if (!fwrite(&jiffies[0], sizeof(jiffies_rec) * len, 1, fout))
+			goto fail_write;
 
 	// write memory_pressures
 	len = memory_pressures.size();
 	if (!fwrite(&len, sizeof(len), 1, fout))
 		goto fail_write;
-	if (!fwrite(&memory_pressures[0], sizeof(uint32_t) * len, 1, fout))
-		goto fail_write;
+	if (len > 0)
+		if (!fwrite(&memory_pressures[0], sizeof(uint32_t) * len, 1, fout))
+			goto fail_write;
 
 	// write memory_allocated
 	len = memory_allocated.size();
 	if (!fwrite(&len, sizeof(len), 1, fout))
 		goto fail_write;
-	if (!fwrite(&memory_allocated[0], sizeof(memory_allocated_rec) * len, 1, fout))
-		goto fail_write;
+	if (len > 0)
+		if (!fwrite(&memory_allocated[0], sizeof(memory_allocated_rec) * len, 1, fout))
+			goto fail_write;
 
 	// write n_sockets_allocated
 	if (!fwrite(&n_sockets_allocated, sizeof(n_sockets_allocated), 1, fout))
 		goto fail_write;
 
 	// write mstamp
-	if (!fwrite(mstamp, sizeof(mstamp), 1, fout))
+	len = mstamp.size();
+	if (!fwrite(&len, sizeof(len), 1, fout))
 		goto fail_write;
+	if (len > 0)
+		if (!fwrite(&mstamp[0], sizeof(skb_mstamp) * len, 1, fout))
+			goto fail_write;
 
 	// write effect_bool
 	if (!fwrite(effect_bool, sizeof(effect_bool), 1, fout))
@@ -91,44 +100,53 @@ int Records::read(const char* filename){
 	if (!fread(&len, sizeof(len), 1, fin))
 		goto fail_read;
 	evts.resize(len);
-	if (!fread(&evts[0], sizeof(derand_event) * len, 1, fin))
-		goto fail_read;
+	if (len > 0)
+		if (!fread(&evts[0], sizeof(derand_event) * len, 1, fin))
+			goto fail_read;
 
 	// read sockcalls
 	if (!fread(&len, sizeof(len), 1, fin))
 		goto fail_read;
 	sockcalls.resize(len);
-	if (!fread(&sockcalls[0], sizeof(derand_rec_sockcall) * len, 1, fin))
-		goto fail_read;
+	if (len > 0)
+		if (!fread(&sockcalls[0], sizeof(derand_rec_sockcall) * len, 1, fin))
+			goto fail_read;
 
 	// read jiffies_reads
 	if (!fread(&len, sizeof(len), 1, fin))
 		goto fail_read;
 	jiffies.resize(len);
-	if (!fread(&jiffies[0], sizeof(jiffies_rec) * len, 1, fin))
-		goto fail_read;
+	if (len > 0)
+		if (!fread(&jiffies[0], sizeof(jiffies_rec) * len, 1, fin))
+			goto fail_read;
 
 	// read memory_pressures
 	if (!fread(&len, sizeof(len), 1, fin))
 		goto fail_read;
 	memory_pressures.resize(len);
-	if (!fread(&memory_pressures[0], sizeof(uint32_t) * len, 1, fin))
-		goto fail_read;
+	if (len > 0)
+		if (!fread(&memory_pressures[0], sizeof(uint32_t) * len, 1, fin))
+			goto fail_read;
 
 	// read memory_allocated
 	if (!fread(&len, sizeof(len), 1, fin))
 		goto fail_read;
 	memory_allocated.resize(len);
-	if (!fread(&memory_allocated[0], sizeof(memory_allocated_rec) * len, 1, fin))
-		goto fail_read;
+	if (len > 0)
+		if (!fread(&memory_allocated[0], sizeof(memory_allocated_rec) * len, 1, fin))
+			goto fail_read;
 	
 	// read n_sockets_allocated
 	if (!fread(&n_sockets_allocated, sizeof(n_sockets_allocated), 1, fin))
 		goto fail_read;
 
 	// read mstamp
-	if (!fread(mstamp, sizeof(mstamp), 1, fin))
+	if (!fread(&len, sizeof(len), 1, fin))
 		goto fail_read;
+	mstamp.resize(len);
+	if (len > 0)
+		if (!fread(&mstamp[0], sizeof(skb_mstamp) * len, 1, fin))
+			goto fail_read;
 
 	// read effect_bool
 	if (!fread(effect_bool, sizeof(effect_bool), 1, fin))
@@ -176,9 +194,9 @@ void Records::print(FILE* fout){
 
 	fprintf(fout, "%u reads to n_sockets_allocated\n", n_sockets_allocated);
 
-	fprintf(fout, "skb_mstamp_get:\n");
-	for (int i = 0; i < 16; i++)
-		fprintf(fout, "%d %u\n", i, mstamp[i]);
+	fprintf(fout, "%lu skb_mstamp_get:\n", mstamp.size());
+	for (int64_t i = 0; i < mstamp.size(); i++)
+		fprintf(fout, "%u %u\n", mstamp[i].stamp_us, mstamp[i].stamp_jiffies);
 
 	fprintf(fout, "effect_bool:\n");
 	for (int i = 0; i < 16; i++)
@@ -239,6 +257,6 @@ void Records::clear(){
 	memory_pressures.clear();
 	memory_allocated.clear();
 	n_sockets_allocated = 0;
-	memset(mstamp, 0, sizeof(mstamp));
+	mstamp.clear();
 	memset(effect_bool, 0 , sizeof(effect_bool));
 }
