@@ -3,6 +3,29 @@
 
 using namespace std;
 
+template <typename T>
+int dump_vector(const vector<T> &v, FILE *fout){
+	uint32_t len = v.size();
+	if (!fwrite(&len, sizeof(len), 1, fout))
+		return 0;
+	if (len > 0)
+		if (!fwrite(&v[0], sizeof(T) * len, 1, fout))
+			return 0;
+	return 1;
+}
+
+template <typename T>
+int read_vector(vector<T> &v, FILE *fin){
+	uint32_t len;
+	if (!fread(&len, sizeof(len), 1, fin))
+		return 0;
+	v.resize(len);
+	if (len > 0)
+		if (!fread(&v[0], sizeof(T) * len, 1, fin))
+			return 0;
+	return 1;
+}
+
 int Records::dump(const char* filename){
 	int ret;
 	uint32_t len;
@@ -23,52 +46,32 @@ int Records::dump(const char* filename){
 		goto fail_write;
 
 	// write events
-	len = evts.size();
-	if (!fwrite(&len, sizeof(len), 1, fout))
+	if (!dump_vector(evts, fout))
 		goto fail_write;
-	if (len > 0)
-		if (!fwrite(&evts[0], sizeof(derand_event) * len, 1, fout))
-			goto fail_write;
 
 	// write sockcalls
-	len = sockcalls.size();
-	if (!fwrite(&len, sizeof(len), 1, fout))
+	if (!dump_vector(sockcalls, fout))
 		goto fail_write;
-	if (len > 0)
-		if (!fwrite(&sockcalls[0], sizeof(derand_rec_sockcall) * len, 1, fout))
-			goto fail_write;
 
 	// write jiffies_reads
-	len = jiffies.size();
-	if (!fwrite(&len, sizeof(len), 1, fout))
+	if (!dump_vector(jiffies, fout))
 		goto fail_write;
-	if (len > 0)
-		if (!fwrite(&jiffies[0], sizeof(jiffies_rec) * len, 1, fout))
-			goto fail_write;
 
 	// write memory_pressures
 	if (!memory_pressures.dump(fout))
 		goto fail_write;
 
 	// write memory_allocated
-	len = memory_allocated.size();
-	if (!fwrite(&len, sizeof(len), 1, fout))
+	if (!dump_vector(memory_allocated, fout))
 		goto fail_write;
-	if (len > 0)
-		if (!fwrite(&memory_allocated[0], sizeof(memory_allocated_rec) * len, 1, fout))
-			goto fail_write;
 
 	// write n_sockets_allocated
 	if (!fwrite(&n_sockets_allocated, sizeof(n_sockets_allocated), 1, fout))
 		goto fail_write;
 
 	// write mstamp
-	len = mstamp.size();
-	if (!fwrite(&len, sizeof(len), 1, fout))
+	if (!dump_vector(mstamp, fout))
 		goto fail_write;
-	if (len > 0)
-		if (!fwrite(&mstamp[0], sizeof(skb_mstamp) * len, 1, fout))
-			goto fail_write;
 
 	// write effect_bool
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
@@ -94,52 +97,32 @@ int Records::read(const char* filename){
 		goto fail_read;
 
 	// read events
-	if (!fread(&len, sizeof(len), 1, fin))
+	if (!read_vector(evts, fin))
 		goto fail_read;
-	evts.resize(len);
-	if (len > 0)
-		if (!fread(&evts[0], sizeof(derand_event) * len, 1, fin))
-			goto fail_read;
 
 	// read sockcalls
-	if (!fread(&len, sizeof(len), 1, fin))
+	if (!read_vector(sockcalls, fin))
 		goto fail_read;
-	sockcalls.resize(len);
-	if (len > 0)
-		if (!fread(&sockcalls[0], sizeof(derand_rec_sockcall) * len, 1, fin))
-			goto fail_read;
 
 	// read jiffies_reads
-	if (!fread(&len, sizeof(len), 1, fin))
+	if (!read_vector(jiffies, fin))
 		goto fail_read;
-	jiffies.resize(len);
-	if (len > 0)
-		if (!fread(&jiffies[0], sizeof(jiffies_rec) * len, 1, fin))
-			goto fail_read;
 
 	// read memory_pressures
 	if (!memory_pressures.read(fin))
 		goto fail_read;
 
 	// read memory_allocated
-	if (!fread(&len, sizeof(len), 1, fin))
+	if (!read_vector(memory_allocated, fin))
 		goto fail_read;
-	memory_allocated.resize(len);
-	if (len > 0)
-		if (!fread(&memory_allocated[0], sizeof(memory_allocated_rec) * len, 1, fin))
-			goto fail_read;
 	
 	// read n_sockets_allocated
 	if (!fread(&n_sockets_allocated, sizeof(n_sockets_allocated), 1, fin))
 		goto fail_read;
 
 	// read mstamp
-	if (!fread(&len, sizeof(len), 1, fin))
+	if (!read_vector(mstamp, fin))
 		goto fail_read;
-	mstamp.resize(len);
-	if (len > 0)
-		if (!fread(&mstamp[0], sizeof(skb_mstamp) * len, 1, fin))
-			goto fail_read;
 
 	// read effect_bool
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
