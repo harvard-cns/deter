@@ -25,7 +25,7 @@ out:
  * Called when a connection is successfully built
  * i.e., after receiving SYN-ACK at client and after receiving ACK at server.
  * So this function is called in bottom-half, so we must not block*/
-static void recorder_create(struct sock *sk){
+static void recorder_create(struct sock *sk, int server_side){
 	int i;
 
 	// create derand_recorder
@@ -55,6 +55,8 @@ static void recorder_create(struct sock *sk){
 	rec->msq.h = rec->msq.t = 0;
 	for (i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		rec->ebq[i].h = rec->ebq[i].t = 0;
+	if (server_side)
+		server_sock_copy(sk); // copy sock init data
 	rec->recorder_id++;
 out:
 	return;
@@ -64,8 +66,7 @@ static void server_recorder_create(struct sock *sk){
 	uint16_t sport = ntohs(inet_sk(sk)->inet_sport);
 	if ((sport >= 60000 && sport <= 60003) || sport == 50010){
 		printk("server sport = %hu, dport = %hu, creating recorder\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
-		recorder_create(sk);
-		server_sock_copy(sk); // copy sock init data
+		recorder_create(sk, 1);
 	}
 }
 static void client_recorder_create(struct sock *sk){
@@ -73,7 +74,7 @@ static void client_recorder_create(struct sock *sk){
 	if ((dport >= 60000 && dport <= 60003) || dport == 50010){
 	//if (inet_sk(sk)->inet_dport == 0x8913){ // port 5001
 		printk("client sport = %hu, dport = %hu, creating recorder\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
-		recorder_create(sk);
+		recorder_create(sk, 0);
 	}
 }
 
