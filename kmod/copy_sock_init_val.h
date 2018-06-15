@@ -2,7 +2,7 @@
 #define _COPY_SOCK_INIT_VAL_H
 
 #include <linux/tcp.h>
-#include "derand_recorder.h"
+#include "tcp_sock_init_data.h"
 
 static inline void server_sock_copy(struct sock *sk){
 	struct inet_connection_sock *icsk = inet_csk(sk);

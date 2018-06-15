@@ -50,6 +50,7 @@ static void replay_start(void){
 	// initialize data
 	initialize_replay();
 	// start kthread
+	replay_ops.replayer = replay_ctrl.addr;
 	replay_task = kthread_run(replay_kthread, NULL, "replay_kthread");
 }
 
