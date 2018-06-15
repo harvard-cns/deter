@@ -1,8 +1,8 @@
-#ifndef _DERAND_RECORDER_H
-#define _DERAND_RECORDER_H
+#ifndef _KMOD__DERAND_RECORDER_H
+#define _KMOD__DERAND_RECORDER_H
 
 #include <linux/types.h>
 #include <linux/skbuff.h>
 #include "../shared_data_struct/derand_recorder.h"
 
-#endif /* _DERAND_RECORDER_H */
+#endif /* _KMOD__DERAND_RECORDER_H */
