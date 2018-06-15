@@ -1,6 +1,8 @@
 #ifndef _SHARED_DATA_STRUCT__BASE_STRUCT_H
 #define _SHARED_DATA_STRUCT__BASE_STRUCT_H
 
+#include "tcp_sock_init_data.h"
+
 /* Different types of socket calls' ID starts with different highest 4 bits */
 #define DERAND_SOCK_ID_BASE 100
 
