@@ -1,6 +1,9 @@
+#include <linux/kthread.h>
+
 #include "replay_ctrl.h"
 #include "mem_util.h"
 #include "derand_replayer.h"
+#include "replay_ops.h"
 
 struct replay_ctrl replay_ctrl = {
 	.addr = NULL,
@@ -39,11 +42,15 @@ static void initialize_replay(void){
 
 	printk("%u %u %u %u %u\n", r->evtq.t, r->jfq.t, r->mpq.t, r->maq.t, r->msq.t);
 }
+
+static struct task_struct *replay_task;
+
 /* Main replay control function */
 static void replay_start(void){
 	// initialize data
 	initialize_replay();
 	// start kthread
+	replay_task = kthread_run(replay_kthread, NULL, "replay_kthread");
 }
 
 // struct name: proc_derand_replay_expose
