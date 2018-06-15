@@ -4,6 +4,9 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+#include "derand_replayer.h"
+
 using namespace std;
 
 static int write_to_proc(const string &proc_file_name){
@@ -17,7 +20,9 @@ static int write_to_proc(const string &proc_file_name){
 	}
 
 	// write to proc file
-	ret = write(fd, "100", 3);
+	char buf[32];
+	sprintf(buf, "%lu", sizeof(derand_replayer));
+	ret = write(fd, buf, strlen(buf));
 	printf("%d\n", ret);
 
 	// close the proc file
