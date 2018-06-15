@@ -3,7 +3,7 @@
 #include <net/derand_ops.h>
 #include "record_ctrl.h"
 #include "derand_recorder.h"
-#include "copy_sock_init_val.h"
+#include "copy_from_sock_init_val.h"
 
 // allocate memory for a socket
 static void* derand_alloc_mem(void){
@@ -56,7 +56,7 @@ static void recorder_create(struct sock *sk, int server_side){
 	for (i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		rec->ebq[i].h = rec->ebq[i].t = 0;
 	if (server_side)
-		server_sock_copy(sk); // copy sock init data
+		copy_from_server_sock(sk); // copy sock init data
 	rec->recorder_id++;
 out:
 	return;

@@ -1,10 +1,10 @@
-#ifndef _COPY_SOCK_INIT_VAL_H
-#define _COPY_SOCK_INIT_VAL_H
+#ifndef _KMOD__COPY_FROM_SOCK_INIT_VAL_H
+#define _KMOD__COPY_FROM_SOCK_INIT_VAL_H
 
 #include <linux/tcp.h>
 #include "derand_recorder.h"
 
-static inline void server_sock_copy(struct sock *sk){
+static inline void copy_from_server_sock(struct sock *sk){
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct tcp_sock_init_data *d = &((struct derand_recorder*)sk->recorder)->init_data;
@@ -53,4 +53,4 @@ static inline void server_sock_copy(struct sock *sk){
 	d->sk_userlocks = sk->sk_userlocks;
 }
 
-#endif /* _COPY_SOCK_INIT_VAL_H */
+#endif /* _KMOD__COPY_FROM_SOCK_INIT_VAL_H */
