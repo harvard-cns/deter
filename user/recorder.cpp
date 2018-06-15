@@ -7,7 +7,7 @@
 #include <vector>
 #include <ctime>
 
-#include "derand.h"
+#include "derand_recorder.hpp"
 #include "mem_share.hpp"
 #include "records.hpp"
 

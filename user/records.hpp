@@ -4,7 +4,7 @@
 #include <vector>
 #include <cstdio>
 #include <string>
-#include "derand.h"
+#include "base_struct.hpp"
 
 struct BitArray{
 	u32 n;

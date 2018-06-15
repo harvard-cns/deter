@@ -1,6 +1,5 @@
-#ifndef _DERAND_H
-#define _DERAND_H
-
+#ifndef _USER__KERNEL_TYPEDEF_HPP
+#define _USER__KERNEL_TYPEDEF_HPP
 #include <stdint.h>
 
 typedef uint8_t u8;
@@ -23,6 +22,4 @@ struct skb_mstamp {
 	};
 };
 
-#include "../shared_data_struct/derand_recorder.h"
-
-#endif /* _NET_DERAND_H */
+#endif /* _USER__KERNEL_TYPEDEF_HPP */
