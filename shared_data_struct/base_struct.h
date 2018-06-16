@@ -27,6 +27,7 @@ struct derand_rec_sockcall{
 	};
 };
 
+#define EVENT_TYPE_PACKET 0
 #define EVENT_TYPE_TASKLET 1
 #define EVENT_TYPE_WRITE_TIMEOUT 2
 #define EVENT_TYPE_DELACK_TIMEOUT 3
@@ -41,7 +42,7 @@ struct derand_event{
 union jiffies_rec{
 	unsigned long init_jiffies; // if this is the first jiffies read
 	struct {
-		s32 jiffies_delta;
+		u32 jiffies_delta;
 		u32 idx_delta;
 	};
 };
@@ -50,7 +51,7 @@ union jiffies_rec{
 union memory_allocated_rec{
 	long init_v;
 	struct {
-		u32 v_delta;
+		s32 v_delta;
 		u32 idx_delta;
 	};
 };
