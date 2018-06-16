@@ -14,6 +14,10 @@ static void initialize_replay(void){
 	int i;
 	struct derand_replayer *r = (struct derand_replayer*) replay_ctrl.addr;
 
+	// init sockcall_id
+	r->seq = 0;
+	atomic_set(&r->sockcall_id, 0);
+
 	// initialize evtq
 	r->evtq.h = 0;
 
@@ -40,7 +44,7 @@ static void initialize_replay(void){
 	for (i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		r->ebq[i].h = 0;
 
-	printk("%u %u %u %u %u\n", r->evtq.t, r->jfq.t, r->mpq.t, r->maq.t, r->msq.t);
+	//printk("%u %u %u %u %u\n", r->evtq.t, r->jfq.t, r->mpq.t, r->maq.t, r->msq.t);
 }
 
 static struct task_struct *replay_task;
