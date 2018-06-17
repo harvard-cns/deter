@@ -9,6 +9,10 @@ struct replay_ops{
 	int started;
 	uint32_t sip, dip;
 	uint16_t sport, dport;
+	struct sock *sk;
+	void (*write_timer_func)(unsigned long);
+	void (*delack_timer_func)(unsigned long);
+	void (*keepalive_timer_func)(unsigned long);
 	spinlock_t lock;
 };
 extern struct replay_ops replay_ops;

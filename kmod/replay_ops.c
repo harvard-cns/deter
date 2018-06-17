@@ -6,6 +6,8 @@
 #include "replay_ops.h"
 #include "copy_to_sock_init_val.h"
 
+void derand_tcp_tasklet_func(struct sock *sk);
+
 struct replay_ops replay_ops = {
 	.replayer = NULL,
 	.started = 0,
@@ -16,8 +18,108 @@ struct replay_ops replay_ops = {
 	.lock = __SPIN_LOCK_UNLOCKED(),
 };
 
+static struct task_struct *replay_task = NULL;
+
+/********************************************************
+ * The queue between replay kthread and packet corrector
+ ********************************************************/
+#define PACKET_QUEUE_SIZE 8192
+struct Packet{
+	struct sk_buff *skb;
+	struct sock *sk;
+	struct net *net;
+	int (*okfn)(struct net *, struct sock *, struct sk_buff *);
+};
+struct PacketQueue{
+	u32 h, t;
+	struct Packet q[PACKET_QUEUE_SIZE];
+};
+#define get_pkt_q_idx(i) ((i) & (PACKET_QUEUE_SIZE - 1))
+
+// the queue
+struct PacketQueue pkt_q;
+
+// enqueue
+static inline void enqueue(struct PacketQueue *q, struct sk_buff *skb, const struct nf_hook_state *state){
+	if (unlikely(q->t == q->h + PACKET_QUEUE_SIZE)){
+		printk("[DERAND_REPLAY] WARNING: PacketQueue full!\n");
+		return;
+	}
+	q->q[get_pkt_q_idx(q->t)] = (struct Packet){.skb = skb, .sk = state->sk, .net = state->net, .okfn = state->okfn};
+	q->t++;
+}
+
+// dequeue
+static int dequeue(struct PacketQueue *q){
+	struct Packet *p;
+	if (q->h >= q->t)
+		return -1;
+	p = &q->q[get_pkt_q_idx(q->h)];
+
+	// because we are replaying bh events, we want to disable bh & preempt
+	preempt_disable();
+	local_bh_disable();
+	p->okfn(p->net, p->sk, p->skb);
+	local_bh_enable();
+	preempt_enable();
+
+	q->h++;
+
+	return 0;
+}
+
+/******************************************************
+ * The kthread of replay
+ *****************************************************/
 int replay_kthread(void *args){
+	int i, n_pkt_btw;
+	struct event_q *evtq = &replay_ops.replayer->evtq;
 	printk("[DERAND_REPLAY] replay_kthread started\n");
+
+	/* Issue all kernel events in order.
+	 * Note that we need to counter the number of packet events (n_pkt_btw) between two other events:
+	 * it should be the gap of seq # between two non-pkt kernel events (timer or tasklet), minus #sockcall events
+	 * example: timer seq 2 (last_seq), sockcall seq 4, tasklet seq 7 (current_seq)
+	 *          after timer seq 2, we should have i = 7,
+	 *                                and n_pkt_btw = current_seq-(last_seq+1)-1 = 7-(2+1)-1;
+	 * */
+	for (i = 0, n_pkt_btw = 0; i < evtq->t; i++){
+		// skip sockcall
+		if (evtq->v[i].type >= DERAND_SOCK_ID_BASE){
+			n_pkt_btw--; // n_pkt_btw-- for every sockcall
+			continue;
+		}
+		n_pkt_btw += evtq->v[get_event_q_idx(i)].seq; // n_pkt_btw += current_seq
+
+		// send packets in between
+		for (; n_pkt_btw; n_pkt_btw--)
+			while (dequeue(&pkt_q));
+
+		preempt_disable();
+		local_bh_disable();
+		// issue this event
+		switch (evtq->v[get_event_q_idx(i)].type){
+			case EVENT_TYPE_TASKLET:
+				derand_tcp_tasklet_func(replay_ops.sk);
+				break;
+			case EVENT_TYPE_WRITE_TIMEOUT:
+				replay_ops.write_timer_func((unsigned long)replay_ops.sk);
+				break;
+			case EVENT_TYPE_DELACK_TIMEOUT:
+				replay_ops.delack_timer_func((unsigned long)replay_ops.sk);
+				break;
+			case EVENT_TYPE_KEEPALIVE_TIMEOUT:
+				replay_ops.keepalive_timer_func((unsigned long)replay_ops.sk);
+				break;
+			default:
+				printk("[DERAND_REPLAY] WARNING: unknown event type: %d\n", evtq->v[get_event_q_idx(i)].type);
+		}
+		local_bh_enable();
+		preempt_enable();
+
+		// update n_pkt_btw
+		n_pkt_btw = -(int)evtq->v[get_event_q_idx(i)].seq - 1; // n_pkt_btw = -(last_seq+1)
+	}
 	return 0;
 }
 
@@ -29,8 +131,14 @@ static void null_timer(unsigned long data){
 
 static void set_null_timer(struct sock *sk){
 	struct inet_connection_sock *icsk = inet_csk(sk);
+
+	replay_ops.write_timer_func = icsk->icsk_retransmit_timer.function;
 	icsk->icsk_retransmit_timer.function = null_timer;
+
+	replay_ops.delack_timer_func = icsk->icsk_delack_timer.function;
 	icsk->icsk_delack_timer.function = null_timer;
+
+	replay_ops.keepalive_timer_func = sk->sk_timer.function;
 	sk->sk_timer.function = null_timer;
 }
 
@@ -65,11 +173,17 @@ static void server_recorder_create(struct sock *sk){
 	replay_ops.sip = inet_sk(sk)->inet_saddr;
 	replay_ops.dip = inet_sk(sk)->inet_daddr;
 
+	// record sk
+	replay_ops.sk = sk;
+
 	// copy sock init data
 	copy_to_server_sock(sk);
 
 	// set timer handlers to null function
 	set_null_timer(sk);
+
+	// start the kthread
+	replay_task = kthread_run(replay_kthread, NULL, "replay_kthread");
 }
 
 static void recorder_destruct(struct sock *sk){
@@ -277,22 +391,6 @@ static bool replay_effect_bool(const struct sock *sk, int loc){
 /****************************************
  * Packet corrector
  ***************************************/
-#define PACKET_QUEUE_SIZE 8192
-struct Packet{
-	struct sk_buff *skb;
-	struct sock *sk;
-	struct net *net;
-	int (*okfn)(struct net *, struct sock *, struct sk_buff *);
-};
-struct PacketQueue{
-	u32 h, t;
-	struct Packet q[PACKET_QUEUE_SIZE];
-};
-#define get_pkt_q_idx(i) ((i) & (PACKET_QUEUE_SIZE - 1))
-
-// The queue for storing packets
-struct PacketQueue pkt_q;
-
 static inline bool should_replay_skb(struct sk_buff *skb){
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
@@ -303,15 +401,6 @@ static inline bool should_replay_skb(struct sk_buff *skb){
 		   tcph->dest == replay_ops.dport;
 }
 
-static inline void enqueue(struct sk_buff *skb, const struct nf_hook_state *state){
-	if (unlikely(pkt_q.t == pkt_q.h + PACKET_QUEUE_SIZE)){
-		printk("[DERAND_REPLAY] WARNING: PacketQueue full!\n");
-		return;
-	}
-	pkt_q.q[get_pkt_q_idx(pkt_q.t)] = (struct Packet){.skb = skb, .sk = state->sk, .net = state->net, .okfn = state->okfn};
-	pkt_q.t++;
-}
-
 static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const struct nf_hook_state *state){
 	// if this packet should not be replayed, skip
 	if (!should_replay_skb(skb))
@@ -320,7 +409,7 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 	// TODO: check if we should drop or mark CE bit
 
 	// enqueue this packet
-	enqueue(skb, state);
+	enqueue(&pkt_q, skb, state);
 	return NF_STOLEN;
 }
 
@@ -424,8 +513,6 @@ static void initialize_replay(struct derand_replayer *r){
 	//printk("%u %u %u %u %u\n", r->evtq.t, r->jfq.t, r->mpq.t, r->maq.t, r->msq.t);
 }
 
-static struct task_struct *replay_task;
-
 int replay_ops_start(struct derand_replayer *addr){
 	replay_ops.replayer = addr;
 
@@ -436,8 +523,6 @@ int replay_ops_start(struct derand_replayer *addr){
 	if (bind_replay_ops())
 		return -1;
 
-	// start kthread
-	replay_task = kthread_run(replay_kthread, NULL, "replay_kthread");
 	return 0;
 }
 
