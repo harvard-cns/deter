@@ -111,6 +111,8 @@ int replay_kthread(void *args){
 			case EVENT_TYPE_KEEPALIVE_TIMEOUT:
 				replay_ops.keepalive_timer_func((unsigned long)replay_ops.sk);
 				break;
+			case EVENT_TYPE_FINISH:
+				break;
 			default:
 				printk("[DERAND_REPLAY] WARNING: unknown event type: %d\n", evtq->v[get_event_q_idx(i)].type);
 		}

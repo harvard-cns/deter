@@ -78,6 +78,19 @@ static void client_recorder_create(struct sock *sk){
 	}
 }
 
+static inline void new_event(struct derand_recorder *rec, u32 type){
+	u32 seq;
+	if (!rec)
+		return;
+
+	// increment the seq #
+	seq = rec->seq++;
+
+	// enqueue the new event
+	rec->evts[get_evt_q_idx(rec->evt_t)] = (struct derand_event){.seq = seq, .type = type};
+	rec->evt_t++;
+}
+
 /* destruct a derand_recorder.
  */
 static void recorder_destruct(struct sock *sk){
@@ -86,6 +99,9 @@ static void recorder_destruct(struct sock *sk){
 		printk("[recorder_destruct] sport = %hu, dport = %hu, recorder is NULL.\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		return;
 	}
+
+	// add a finish event
+	new_event(rec, EVENT_TYPE_FINISH);
 
 	// update recorder_id
 	rec->recorder_id++;
@@ -148,19 +164,6 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 	rec_sc->recvmsg.size = len;
 	// return sockcall ID 
 	return sc_id;
-}
-
-static inline void new_event(struct derand_recorder *rec, u32 type){
-	u32 seq;
-	if (!rec)
-		return;
-
-	// increment the seq #
-	seq = rec->seq++;
-
-	// enqueue the new event
-	rec->evts[get_evt_q_idx(rec->evt_t)] = (struct derand_event){.seq = seq, .type = type};
-	rec->evt_t++;
 }
 
 static void sockcall_lock(struct sock *sk, u32 sc_id){
