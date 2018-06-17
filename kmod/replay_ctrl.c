@@ -1,5 +1,3 @@
-#include <linux/kthread.h>
-
 #include "replay_ctrl.h"
 #include "mem_util.h"
 #include "derand_replayer.h"
@@ -8,55 +6,8 @@
 struct replay_ctrl replay_ctrl = {
 	.addr = NULL,
 	.size = 0,
+	.replay_started = false,
 };
-
-static void initialize_replay(void){
-	int i;
-	struct derand_replayer *r = (struct derand_replayer*) replay_ctrl.addr;
-
-	// init sockcall_id
-	r->seq = 0;
-	atomic_set(&r->sockcall_id, 0);
-
-	// initialize evtq
-	r->evtq.h = 0;
-
-	// initialize jfq
-	r->jfq.h = 0;
-	if (r->jfq.t > 0)
-		r->jfq.last_jiffies = r->jfq.v[0].init_jiffies;
-	r->jfq.idx_delta = 0;
-
-	// initialize mpq
-	r->mpq.h = 0;
-	r->mpq.seq = 0;
-
-	// initialize maq
-	r->maq.h = 0;
-	if (r->maq.t > 0)
-		r->maq.last_v = r->maq.v[0].init_v;
-	r->maq.idx_delta = 0;
-
-	// initialize msq
-	r->msq.h= 0;
-
-	// initialize ebq
-	for (i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
-		r->ebq[i].h = 0;
-
-	//printk("%u %u %u %u %u\n", r->evtq.t, r->jfq.t, r->mpq.t, r->maq.t, r->msq.t);
-}
-
-static struct task_struct *replay_task;
-
-/* Main replay control function */
-static void replay_start(void){
-	// initialize data
-	initialize_replay();
-	// start kthread
-	replay_ops.replayer = replay_ctrl.addr;
-	replay_task = kthread_run(replay_kthread, NULL, "replay_kthread");
-}
 
 // struct name: proc_derand_replay_expose
 INIT_PROC_EXPOSE(derand_replay)
@@ -67,15 +18,19 @@ static int expose_addr(void *args, char* buf, size_t len){
 	return sprintf(buf, "0x%llx\n", virt_to_phys(replay_ctrl.addr));
 }
 
-/* proc write callback: 
+/* NOTE: This is the real start point of replay, triggered by user space
+ * proc write callback: 
  * This function should be called when the user finish copy data */
 static int user_copy_finish(void *args, char* buf, size_t len){
 	// if this call conforms to the protocol
-	if (strcmp(buf, "copy finish") == 0){
-		replay_start();
-		return 1;
-	}
-	return -1;
+	if (strcmp(buf, "copy finish") != 0)
+		return -1;
+	// start the replay
+	if (replay_ops_start(replay_ctrl.addr))
+		return -1;
+
+	replay_ctrl.replay_started = true;
+	return 1;
 }
 
 /* proc write callback:
@@ -129,6 +84,12 @@ int replay_prepare(void){
 
 void replay_stop(void){
 	int order;
+
+	// stop replay_ops
+	if (replay_ctrl.replay_started){
+		replay_ops_stop();
+		replay_ctrl.replay_started = false;
+	}
 
 	// close proc file
 	proc_expose_stop(&proc_derand_replay_expose);

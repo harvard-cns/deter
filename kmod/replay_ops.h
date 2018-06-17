@@ -7,14 +7,13 @@
 struct replay_ops{
 	struct derand_replayer* replayer;
 	int started;
+	uint32_t sip, dip;
 	uint16_t sport, dport;
 	spinlock_t lock;
 };
 extern struct replay_ops replay_ops;
 
-int replay_kthread(void *args);
-
-void bind_replay_ops(void);
-void unbind_replay_ops(void);
+int replay_ops_start(struct derand_replayer *addr);
+void replay_ops_stop(void);
 
 #endif /* _KMOD__REPLAY_OPS_H */

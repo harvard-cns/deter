@@ -6,6 +6,7 @@
 struct replay_ctrl{
 	void *addr;
 	u32 size;
+	bool replay_started; // indicate if the replay_ops has run or not
 };
 extern struct replay_ctrl replay_ctrl;
 
