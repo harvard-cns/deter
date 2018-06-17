@@ -12,14 +12,21 @@ struct replay_ctrl replay_ctrl = {
 // struct name: proc_derand_replay_expose
 INIT_PROC_EXPOSE(derand_replay)
 
+/********************************************
+ * start of replay:
+ * code logic:
+ *   first expose a proc file for user to write the buffer size (user_input_buffer_size)
+ *   then allocate the buffer, expose its address to user throught the proc file (expose_addr)
+ *   Then user will write the proc file again to tell us it has finished copying data (user_copy_finish), so we can start replay.
+ * So user_copy_finish() is the real start point of replay.
+ *******************************************/
 /* proc read callback:
  * This function returns the shared memory address */
 static int expose_addr(void *args, char* buf, size_t len){
 	return sprintf(buf, "0x%llx\n", virt_to_phys(replay_ctrl.addr));
 }
 
-/* NOTE: This is the real start point of replay, triggered by user space
- * proc write callback: 
+/* proc write callback: 
  * This function should be called when the user finish copy data */
 static int user_copy_finish(void *args, char* buf, size_t len){
 	// if this call conforms to the protocol
@@ -82,6 +89,9 @@ int replay_prepare(void){
 	return 0;
 }
 
+/********************************************
+ * finish of replay
+ *******************************************/
 void replay_stop(void){
 	int order;
 
