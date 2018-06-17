@@ -73,6 +73,9 @@ int main(int argc, char **argv){
 	// tell kernel copy finish
 	send_copy_finish("derand_replay");
 
+	// start replay
+	r.start_replay_server();
+
 fail_read_records:
 	kmem.unmap_mem();
 	return 0;

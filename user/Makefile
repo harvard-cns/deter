@@ -13,7 +13,7 @@ reader: reader.cpp records.o
 	g++ reader.cpp records.o -o reader -O3 -std=gnu++11
 
 replay: replay.cpp replayer.o records.o mem_share.o
-	g++ replay.cpp replayer.o records.o mem_share.o -o replay -O3 -std=gnu++11
+	g++ replay.cpp replayer.o records.o mem_share.o -o replay -O3 -std=gnu++11 -lpthread
 
 replayer.o: replayer.cpp replayer.hpp
 	g++ replayer.cpp -c -o replayer.o -O3 -std=gnu++11

@@ -1,5 +1,9 @@
 #include <cstdio>
 #include <cstring>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 #include "replayer.hpp"
 
 using namespace std;
@@ -106,6 +110,62 @@ int Replayer::read_records(const string &record_file_name){
 	if (convert_effect_bool())
 		return -7;
 	return 0;
+}
+
+int Replayer::start_replay_server(){
+	// first listen, and wait for a working socket
+	int listen_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (listen_sock_fd < 0)
+		return -1;
+	sockaddr_in server_addr;
+	memset(&server_addr, 0, sizeof(sockaddr_in));
+	server_addr.sin_family = AF_INET;
+	server_addr.sin_addr.s_addr = INADDR_ANY;
+	server_addr.sin_port = htons(rec.sport);
+	if (bind(listen_sock_fd, (sockaddr *) &server_addr, sizeof(server_addr)) < 0)
+		return -2;
+	listen(listen_sock_fd, 1);
+
+	// get a working socket sockfd
+	sockaddr_in client_addr;
+	socklen_t client_addr_len = sizeof(client_addr);
+	sockfd = accept(listen_sock_fd, (sockaddr *) &client_addr, &client_addr_len);
+	close(listen_sock_fd);
+
+	// start replay
+	start_replay();
+}
+
+void sockcall_thread(int sockfd, derand_rec_sockcall sc, int id){
+	if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG){
+		vector<uint8_t> buf(sc.sendmsg.size);
+		send(sockfd, &buf[0], sc.sendmsg.size, sc.sendmsg.flags);
+	} else if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG){
+		vector<uint8_t> buf(sc.recvmsg.size);
+		recv(sockfd, &buf[0], sc.recvmsg.size, sc.recvmsg.flags);
+	}
+	printf("sockcall %d finishes\n", id);
+}
+
+void Replayer::start_replay(){
+	vector<thread> thread_pool;
+	for (int i = 0; i < rec.sockcalls.size(); i++){
+		// wait for this socket call to be issued
+		volatile uint32_t &seq = d->seq;
+		volatile uint32_t &h = d->evtq.h;
+		if (h >= d->evtq.t)
+			printf("Error: more sockcall than recorded\n");
+
+		// wait until next event is sockcall lock, and the sockcall id matches
+		while (!(seq == d->evtq.v[get_event_q_idx(h)].seq && d->evtq.v[get_event_q_idx(h)].type == i + DERAND_SOCK_ID_BASE));
+
+		// issue the socket call
+		thread_pool.push_back(thread(sockcall_thread, sockfd, rec.sockcalls[i], i));
+	}
+
+	// wait for all sockcall to finish
+	for (int i = 0; i < thread_pool.size(); i++)
+		thread_pool[i].join();
 }
 
 /*

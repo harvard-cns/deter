@@ -2,6 +2,7 @@
 #define _USER__REPLAYER_HPP
 
 #include <string>
+#include <thread>
 #include "derand_replayer.hpp"
 #include "records.hpp"
 
@@ -9,6 +10,7 @@ class Replayer{
 public:
 	derand_replayer *d;
 	Records rec;
+	int sockfd; // the working socket
 
 	Replayer();
 	void set_addr(void *addr){d = (derand_replayer*)addr;}
@@ -19,6 +21,10 @@ public:
 	int convert_memory_allocated();
 	int convert_mstamp();
 	int convert_effect_bool();
+
+	/* start the server side replay */
+	int start_replay_server();
+	void start_replay();
 };
 
 #endif /* _USER__REPLAYER_HPP */
