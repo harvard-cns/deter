@@ -32,10 +32,11 @@ struct derand_rec_sockcall{
 #define EVENT_TYPE_WRITE_TIMEOUT 2
 #define EVENT_TYPE_DELACK_TIMEOUT 3
 #define EVENT_TYPE_KEEPALIVE_TIMEOUT 4
+#define EVENT_TYPE_FINISH 99
 /* struct for each lock acquiring event */
 struct derand_event{
 	u32 seq;
-	u32 type; // 0: pkt; 1: tsq; 2~99: timeout types; 100 ~ inf: socket call IDs + 100
+	u32 type; // 0: pkt; 1: tsq; 2~98: timeout types; 99: finish; 100 ~ inf: socket call IDs + 100
 };
 
 /* struct for a jiffies read with new value */
