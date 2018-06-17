@@ -23,6 +23,7 @@ clean_records:
 
 clean:
 	rm recorder
+	rm replay
 	rm reader
 	rm records.o
 	rm mem_share.o
