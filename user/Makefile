@@ -18,6 +18,9 @@ replay: replay.cpp replayer.o records.o mem_share.o
 replayer.o: replayer.cpp replayer.hpp
 	g++ replayer.cpp -c -o replayer.o -O3 -std=gnu++11
 
+logger: logger.cpp mem_share.o
+	g++ logger.cpp mem_share.o -o logger -O3 -std=gnu++11
+
 clean_records:
 	sudo rm *:*'->'*:*
 

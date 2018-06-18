@@ -9,16 +9,19 @@
 #include <linux/tcp.h>
 
 #include "replay_ctrl.h"
+#include "logger.h"
 
 static int __init replay_init(void)
 {
 	replay_prepare();
+	init_logger();
 	return 0;
 }
 
 static void __exit replay_exit(void)
 {
 	replay_stop();
+	clear_logger();
 }
 
 MODULE_LICENSE("GPL");
