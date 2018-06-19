@@ -49,23 +49,23 @@ static int user_copy_finish(void *args, char* buf, size_t len){
 static int user_input_buffer_size(void *args, char* buf, size_t len){
 	int order;
 	if (replay_ctrl.addr != NULL){
-		derand_log("[DERAND_REPLAY] Warn: cannot accept user buffer_size more than once\n");
+		derand_log("Warning: cannot accept user buffer_size more than once\n");
 		return -1;
 	}
 	if (sscanf(buf, "%u", &replay_ctrl.size) == 0){
-		derand_log("[DERAND_REPLAY] Error: user input buffer_size format error\n");
+		derand_log("Error: user input buffer_size format error\n");
 		return -1;
 	}
-	derand_log("[DERAND_REPLAY] buffer size = %u\n", replay_ctrl.size);
+	derand_log("buffer size = %u\n", replay_ctrl.size);
 
 	// allocate memory
 	order = get_page_order(replay_ctrl.size);
 	replay_ctrl.addr = (void*)__get_free_pages(GFP_KERNEL, order);
 	if (!replay_ctrl.addr){
-		derand_log("[DERAND_REPLAY] fail get free pages\n");
+		derand_log("fail get free pages\n");
 		return -1;
 	}
-	derand_log("[DERAND_REPLAY] successfully get %d pages\n", 1 << order);
+	derand_log("successfully get %d pages\n", 1 << order);
 
 	// reserve pages
 	reserve_pages(virt_to_page(replay_ctrl.addr), 1<<order);
@@ -84,7 +84,7 @@ int replay_prepare(void){
 	proc_derand_replay_expose.input_func = user_input_buffer_size;
 	ret = proc_expose_start(&proc_derand_replay_expose);
 	if (ret){
-		derand_log("[DERAND_REPLAY] replay_prepare: Fail to open proc file\n");
+		derand_log("replay_prepare: Fail to open proc file\n");
 		return -1;
 	}
 	return 0;

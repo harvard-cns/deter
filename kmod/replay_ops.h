@@ -4,9 +4,16 @@
 #include <linux/spinlock.h>
 #include "derand_replayer.h"
 
+enum ReplayState{
+	NOT_STARTED = 0,
+	STARTED = 1,
+	SHOULD_STOP = 2,
+	STOPPED = 3,
+};
+
 struct replay_ops{
 	struct derand_replayer* replayer;
-	int started;
+	volatile enum ReplayState state;
 	uint32_t sip, dip;
 	uint16_t sport, dport;
 	struct sock *sk;
