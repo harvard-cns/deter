@@ -225,6 +225,7 @@ void Records::print(FILE* fout){
 	}
 
 	#if DERAND_DEBUG
+	fprintf(fout, "%lu general events\n", geq.size());
 	for (int i = 0; i < geq.size(); i++){
 		u8 type = geq[i].type;
 		// 0: evtq; 1: jfq; 2: mpq; 3: maq; 4: saq; 5: msq; 6 ~ 6+DERAND_EFFECT_BOOL_N_LOC-1: ebq
