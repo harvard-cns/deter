@@ -3,6 +3,8 @@
 
 #include "tcp_sock_init_data.h"
 
+#define DERAND_DEBUG 1
+
 /* Different types of socket calls' ID starts with different highest 4 bits */
 #define DERAND_SOCK_ID_BASE 100
 
@@ -36,7 +38,10 @@ struct derand_rec_sockcall{
 /* struct for each lock acquiring event */
 struct derand_event{
 	u32 seq;
-	u32 type; // 0: pkt; 1: tsq; 2~98: timeout types; 99: finish; 100 ~ inf: socket call IDs + 100
+	u32 type; // 0: pkt; 1: tsq; 2~98: timeout types; 99: finish; 100 ~ inf: socket call IDs + DERAND_SOCK_ID_BASE
+	#if DERAND_DEBUG
+	u32 dbg_data;
+	#endif
 };
 
 /* struct for a jiffies read with new value */
@@ -58,5 +63,10 @@ union memory_allocated_rec{
 };
 
 #define DERAND_EFFECT_BOOL_N_LOC 16
+
+/* struct general event (for debug): including locking and reading */
+struct GeneralEvent{
+	u8 type; // 0: evtq; 1: jfq; 2: mpq; 3: maq; 4: saq; 5: msq; 6 ~ 6+DERAND_EFFECT_BOOL_N_LOC-1: ebq
+};
 
 #endif /* _SHARED_DATA_STRUCT__BASE_STRUCT_H */

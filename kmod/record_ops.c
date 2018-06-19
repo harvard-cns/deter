@@ -55,6 +55,9 @@ static void recorder_create(struct sock *sk, int server_side){
 	rec->msq.h = rec->msq.t = 0;
 	for (i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		rec->ebq[i].h = rec->ebq[i].t = 0;
+	#if DERAND_DEBUG
+	rec->geq.h = rec->geq.t = 0;
+	#endif
 	if (server_side)
 		copy_from_server_sock(sk); // copy sock init data
 	rec->recorder_id++;
@@ -78,7 +81,8 @@ static void client_recorder_create(struct sock *sk){
 	}
 }
 
-static inline void new_event(struct derand_recorder *rec, u32 type){
+static inline void new_event(struct sock *sk, u32 type){
+	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
 	u32 seq;
 	if (!rec)
 		return;
@@ -87,7 +91,12 @@ static inline void new_event(struct derand_recorder *rec, u32 type){
 	seq = rec->seq++;
 
 	// enqueue the new event
+	#if DERAND_DEBUG
+	add_geq(&rec->geq, 0);
+	rec->evts[get_evt_q_idx(rec->evt_t)] = (struct derand_event){.seq = seq, .type = type, .dbg_data = tcp_sk(sk)->write_seq};
+	#else
 	rec->evts[get_evt_q_idx(rec->evt_t)] = (struct derand_event){.seq = seq, .type = type};
+	#endif
 	rec->evt_t++;
 }
 
@@ -101,7 +110,7 @@ static void recorder_destruct(struct sock *sk){
 	}
 
 	// add a finish event
-	new_event(rec, EVENT_TYPE_FINISH);
+	new_event(sk, EVENT_TYPE_FINISH);
 
 	// update recorder_id
 	rec->recorder_id++;
@@ -167,7 +176,7 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 }
 
 static void sockcall_lock(struct sock *sk, u32 sc_id){
-	new_event(sk->recorder, sc_id + DERAND_SOCK_ID_BASE);
+	new_event(sk, sc_id + DERAND_SOCK_ID_BASE);
 }
 
 /* incoming packets do not need to record their seq # */
@@ -178,23 +187,26 @@ static void incoming_pkt(struct sock *sk){
 }
 
 static void write_timer(struct sock *sk){
-	new_event(sk->recorder, EVENT_TYPE_WRITE_TIMEOUT);
+	new_event(sk, EVENT_TYPE_WRITE_TIMEOUT);
 }
 
 static void delack_timer(struct sock *sk){
-	new_event(sk->recorder, EVENT_TYPE_DELACK_TIMEOUT);
+	new_event(sk, EVENT_TYPE_DELACK_TIMEOUT);
 }
 
 static void keepalive_timer(struct sock *sk){
-	new_event(sk->recorder, EVENT_TYPE_KEEPALIVE_TIMEOUT);
+	new_event(sk, EVENT_TYPE_KEEPALIVE_TIMEOUT);
 }
 
 static void tasklet(struct sock *sk){
-	new_event(sk->recorder, EVENT_TYPE_TASKLET);
+	new_event(sk, EVENT_TYPE_TASKLET);
 }
 
 static void read_jiffies(const struct sock *sk, unsigned long v, int id){
 	struct jiffies_q *jf = &((struct derand_recorder*)sk->recorder)->jf;
+	#if DERAND_DEBUG
+	add_geq(&((struct derand_recorder*)sk->recorder)->geq, 1);
+	#endif
 	if (jf->t == 0){ // this is the first jiffies read
 		jf->v[0].init_jiffies = v;
 		jf->last_jiffies = v;
@@ -212,15 +224,24 @@ static void read_jiffies(const struct sock *sk, unsigned long v, int id){
 }
 
 static void record_tcp_under_memory_pressure(const struct sock *sk, bool ret){
+	#if DERAND_DEBUG
+	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 2);
+	#endif
 	push_memory_pressure_q(&((struct derand_recorder*)(sk->recorder))->mpq, ret);
 }
 
 static void record_sk_under_memory_pressure(const struct sock *sk, bool ret){
+	#if DERAND_DEBUG
+	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 2);
+	#endif
 	push_memory_pressure_q(&((struct derand_recorder*)(sk->recorder))->mpq, ret);
 }
 
 static void record_sk_memory_allocated(const struct sock *sk, long ret){
 	struct memory_allocated_q *maq = &((struct derand_recorder*)sk->recorder)->maq;
+	#if DERAND_DEBUG
+	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 3);
+	#endif
 	if (maq->t == 0){ // this is the first read to memory_allocated
 		maq->v[0].init_v = ret;
 		maq->last_v = ret;
@@ -239,16 +260,25 @@ static void record_sk_memory_allocated(const struct sock *sk, long ret){
 
 static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){
 	struct derand_recorder *rec = sk->recorder;
+	#if DERAND_DEBUG
+	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 4);
+	#endif
 	rec->n_sockets_allocated++;
 }
 
 static void record_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int loc){
 	struct mstamp_q *msq = &((struct derand_recorder*)sk->recorder)->msq;
+	#if DERAND_DEBUG
+	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 5);
+	#endif
 	msq->v[get_mstamp_q_idx(msq->t)] = *cl;
 	msq->t++;
 }
 
 static void record_effect_bool(const struct sock *sk, int loc, bool v){
+	#if DERAND_DEBUG
+	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 6 + loc);
+	#endif
 	push_effect_bool_q(&((struct derand_recorder*)sk->recorder)->ebq[loc], v);
 }
 

@@ -78,6 +78,12 @@ int Records::dump(const char* filename){
 		if (!effect_bool[i].dump(fout))
 			goto fail_write;
 
+	#if DERAND_DEBUG
+	// write geq
+	if (!dump_vector(geq, fout))
+		goto fail_write;
+	#endif
+
 	fclose(fout);
 	return 0;
 fail_write:
@@ -129,6 +135,12 @@ int Records::read(const char* filename){
 		if (!effect_bool[i].read(fin))
 			goto fail_read;
 
+	#if DERAND_DEBUG
+	// read geq
+	if (!read_vector(geq, fin))
+		goto fail_read;
+	#endif
+
 	fclose(fin);
 	return 0;
 fail_read:
@@ -149,7 +161,34 @@ void Records::print(FILE* fout){
 	fprintf(fout, "%lu events\n", evts.size());
 	for (int i = 0; i < evts.size(); i++){
 		derand_event &e = evts[i];
-		fprintf(fout, "%u %u\n", e.seq, e.type);
+		fprintf(fout, "%u ", e.seq);
+		if (e.type == EVENT_TYPE_PACKET)
+			fprintf(fout, "pkt");
+		else if (e.type == EVENT_TYPE_TASKLET)
+			fprintf(fout, "tasklet");
+		else if (e.type == EVENT_TYPE_WRITE_TIMEOUT)
+			fprintf(fout, "write_timeout");
+		else if (e.type == EVENT_TYPE_DELACK_TIMEOUT)
+			fprintf(fout, "delack_timeout");
+		else if (e.type == EVENT_TYPE_KEEPALIVE_TIMEOUT)
+			fprintf(fout, "keepalive_timeout");
+		else if (e.type == EVENT_TYPE_FINISH)
+			fprintf(fout, "finish");
+		else{
+			uint32_t idx = (e.type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
+			uint32_t loc = (e.type - DERAND_SOCK_ID_BASE) >> 28;
+			fprintf(fout, "sockcall %u: ", idx);
+			if (sockcalls[idx].type == DERAND_SOCKCALL_TYPE_SENDMSG)
+				fprintf(fout, "sendmsg");
+			else if (sockcalls[idx].type == DERAND_SOCKCALL_TYPE_RECVMSG)
+				fprintf(fout, "recvmsg ");
+			fprintf(fout, "loc: (%u %u)", loc>>1, loc&1);
+		}
+
+		#if DERAND_DEBUG
+		fprintf(fout, " %u", e.dbg_data);
+		#endif
+		fprintf(fout, "\n");
 	}
 	fprintf(fout, "%lu new jiffies\n", jiffies.size());
 	if (jiffies.size() > 0){
@@ -184,6 +223,28 @@ void Records::print(FILE* fout){
 			fprintf(fout, "\n");
 		}
 	}
+
+	#if DERAND_DEBUG
+	for (int i = 0; i < geq.size(); i++){
+		u8 type = geq[i].type;
+		// 0: evtq; 1: jfq; 2: mpq; 3: maq; 4: saq; 5: msq; 6 ~ 6+DERAND_EFFECT_BOOL_N_LOC-1: ebq
+		if (type == 0)
+			fprintf(fout, "evtq");
+		else if (type == 1)
+			fprintf(fout, "jfq");
+		else if (type == 2)
+			fprintf(fout, "mpq");
+		else if (type == 3)
+			fprintf(fout, "maq");
+		else if (type == 4)
+			fprintf(fout, "saq");
+		else if (type == 5)
+			fprintf(fout, "msq");
+		else 
+			fprintf(fout, "ebq %u", type - 6);
+		fprintf(fout, "\n");
+	}
+	#endif
 }
 
 void Records::print_init_data(FILE* fout){
@@ -243,4 +304,7 @@ void Records::clear(){
 	mstamp.clear();
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		effect_bool[i].clear();
+	#if DERAND_DEBUG
+	geq.clear();
+	#endif
 }

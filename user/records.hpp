@@ -56,6 +56,9 @@ public:
 	uint32_t n_sockets_allocated;
 	std::vector<skb_mstamp> mstamp;
 	BitArray effect_bool[DERAND_EFFECT_BOOL_N_LOC];
+	#if DERAND_DEBUG
+	std::vector<GeneralEvent> geq;
+	#endif
 
 	Records() : recorder_id(-1) {}
 	int dump(const char* filename = NULL);

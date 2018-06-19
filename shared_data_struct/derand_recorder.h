@@ -78,6 +78,22 @@ static inline void push_effect_bool_q(struct effect_bool_q *q, bool v){
 		q->v[arr_idx] |= ((u32)v) << bit_idx;
 }
 
+/****************************************
+ * GeneralEvent
+ ***************************************/
+#ifdef DERAND_DEBUG
+#define DERAND_GENERAL_EVENT_PER_SOCK 8192
+struct GeneralEventQ{
+	u32 h, t;
+	struct GeneralEvent v[DERAND_GENERAL_EVENT_PER_SOCK];
+};
+#define get_geq_idx(i) ((i) & (DERAND_GENERAL_EVENT_PER_SOCK - 1))
+static inline void add_geq(struct GeneralEventQ *geq, u8 type){
+	geq->v[get_geq_idx(geq->t)] = (struct GeneralEvent){.type = type};
+	geq->t++;
+}
+#endif /* DERAND_DEBUG */
+
 #define DERAND_EVENT_PER_SOCK 4096
 #define DERAND_SOCKCALL_PER_SOCK 4096
 
@@ -98,6 +114,9 @@ struct derand_recorder{
 	u32 n_sockets_allocated;
 	struct mstamp_q msq; // skb_mstamp
 	struct effect_bool_q ebq[DERAND_EFFECT_BOOL_N_LOC]; // effect_bool
+	#ifdef DERAND_DEBUG
+	struct GeneralEventQ geq;
+	#endif
 };
 
 #define get_sc_q_idx(i) ((i) & (DERAND_SOCKCALL_PER_SOCK - 1))

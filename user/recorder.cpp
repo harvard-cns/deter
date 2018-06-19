@@ -99,6 +99,12 @@ int main()
 						res[i].effect_bool[k].push_back(ebq.v[get_effect_bool_q_idx(j) / 32]);
 					ebq.h = j;
 				}
+				#if DERAND_DEBUG
+				// copy GeneralEvent
+				for (j = rec->geq.h; j < rec->geq.t; j++)
+					res[i].geq.push_back(rec->geq.v[get_geq_idx(j)]);
+				rec->geq.h = j;
+				#endif
 
 				// if the socket's recorder has finished, do the finish job
 				// NOTE: we must use the test result before the copying. Otherwise if we test here, there may be new data after copy, which will be lost
