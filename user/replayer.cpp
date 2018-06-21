@@ -86,6 +86,20 @@ int Replayer::convert_effect_bool(){
 	return 0;
 }
 
+#if DERAND_DEBUG
+int Replayer::convert_general_event(){
+	auto &s = rec.geq;
+	if (s.size() > GENERAL_EVENT_Q_LEN){
+		fprintf(stderr, "too many general events: %lu > %u\n", s.size(), GENERAL_EVENT_Q_LEN);
+		return -1;
+	}
+	d->geq.h = 0;
+	d->geq.t = s.size();
+	memcpy(d->geq.v, &s[0], sizeof(GeneralEvent) * s.size());
+	return 0;
+}
+#endif /* DERAND_DEBUG */
+
 int Replayer::read_records(const string &record_file_name){
 	if (rec.read(record_file_name.c_str())){
 		fprintf(stderr, "cannot read file: %s\n", record_file_name.c_str());
@@ -109,6 +123,10 @@ int Replayer::read_records(const string &record_file_name){
 		return -6;
 	if (convert_effect_bool())
 		return -7;
+	#if DERAND_DEBUG
+	if (convert_general_event())
+		return -8;
+	#endif
 	return 0;
 }
 
@@ -149,10 +167,10 @@ void sockcall_thread(int sockfd, derand_rec_sockcall sc, int id){
 
 void Replayer::start_replay(){
 	vector<thread> thread_pool;
+	volatile uint32_t &seq = d->seq;
+	volatile uint32_t &h = d->evtq.h;
 	for (int i = 0; i < rec.sockcalls.size(); i++){
 		// wait for this socket call to be issued
-		volatile uint32_t &seq = d->seq;
-		volatile uint32_t &h = d->evtq.h;
 		if (h >= d->evtq.t)
 			printf("Error: more sockcall than recorded\n");
 
@@ -166,6 +184,9 @@ void Replayer::start_replay(){
 	// wait for all sockcall to finish
 	for (int i = 0; i < thread_pool.size(); i++)
 		thread_pool[i].join();
+	printf("wait to finish\n");
+	while (h < d->evtq.t - 1);
+	printf("finish!\n");
 }
 
 /*

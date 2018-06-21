@@ -7,6 +7,7 @@ int main(int argc, char **argv){
 	}
 	Records rec;
 	rec.read(argv[1]);
+	printf("!\n");
 	rec.print_init_data();
 	rec.print();
 	return 0;

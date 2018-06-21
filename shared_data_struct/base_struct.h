@@ -28,6 +28,18 @@ struct derand_rec_sockcall{
 		struct derand_rec_sockcall_tcp_recvmsg recvmsg;
 	};
 };
+static inline const char* get_sockcall_str(struct derand_rec_sockcall *sc, char* buf){
+	switch (sc->type){
+		case DERAND_SOCKCALL_TYPE_SENDMSG:
+			sprintf(buf, "sendmsg");
+			break;
+		case DERAND_SOCKCALL_TYPE_RECVMSG:
+			sprintf(buf, "recvmsg");
+			break;
+	}
+	return buf;
+}
+#define get_sockcall_idx(type) (((type) - DERAND_SOCK_ID_BASE) & 0x0fffffff)
 
 #define EVENT_TYPE_PACKET 0
 #define EVENT_TYPE_TASKLET 1
@@ -43,6 +55,34 @@ struct derand_event{
 	u32 dbg_data;
 	#endif
 };
+static inline char* get_event_name(u32 type, char* buf){
+	uint32_t idx, loc;
+	switch (type){
+		case EVENT_TYPE_PACKET:
+			sprintf(buf, "pkt");
+			break;
+		case EVENT_TYPE_TASKLET:
+			sprintf(buf, "tasklet");
+			break;
+		case EVENT_TYPE_WRITE_TIMEOUT:
+			sprintf(buf, "write_timeout");
+			break;
+		case EVENT_TYPE_DELACK_TIMEOUT:
+			sprintf(buf, "delack_timeout");
+			break;
+		case EVENT_TYPE_KEEPALIVE_TIMEOUT:
+			sprintf(buf, "keepalive_timeout");
+			break;
+		case EVENT_TYPE_FINISH:
+			sprintf(buf, "finish");
+			break;
+		default:
+			idx = (type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
+			loc = (type - DERAND_SOCK_ID_BASE) >> 28;
+			sprintf(buf, "sockcall %u (%u %u)", idx, loc>>1, loc&1);
+	}
+	return buf;
+}
 
 /* struct for a jiffies read with new value */
 union jiffies_rec{
@@ -66,7 +106,37 @@ union memory_allocated_rec{
 
 /* struct general event (for debug): including locking and reading */
 struct GeneralEvent{
-	u8 type; // 0: evtq; 1: jfq; 2: mpq; 3: maq; 4: saq; 5: msq; 6 ~ 6+DERAND_EFFECT_BOOL_N_LOC-1: ebq
+	u32 type; // 0: evtq; 1: jfq; 2: mpq; 3: maq; 4: saq; 5: msq; 6 ~ 6+DERAND_EFFECT_BOOL_N_LOC-1: ebq
+	u32 data[2];
 };
+static inline const char* get_ge_name(u32 type, char* buf){
+	switch (type){
+		case 0: 
+			sprintf(buf, "evtq");
+			break;
+		case 1:
+			sprintf(buf, "jfq");
+			break;
+		case 2:
+			sprintf(buf, "mpq");
+			break;
+		case 3:
+			sprintf(buf, "maq");
+			break;
+		case 4:
+			sprintf(buf, "saq");
+			break;
+		case 5:
+			sprintf(buf, "msq");
+			break;
+		default:
+			if (type < 1000)
+				sprintf(buf, "ebq %u", type - 6);
+			else 
+				sprintf(buf, "loc %u", type - 1000);
+			break;
+	}
+	return buf;
+}
 
 #endif /* _SHARED_DATA_STRUCT__BASE_STRUCT_H */

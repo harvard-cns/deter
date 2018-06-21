@@ -15,7 +15,7 @@
 static int __init record_init(void)
 {
 	// create record_ctrl data
-	if (create_record_ctrl(16))
+	if (create_record_ctrl(4))
 		goto fail_create_ctrl;
 
 	// expose data to user space

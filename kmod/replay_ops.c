@@ -269,9 +269,15 @@ static inline void wait_before_lock(struct sock *sk, u32 type){
 	evtq = &r->evtq;
 	seq = &r->seq;
 
-	derand_log("event type %u is going to acquire lock\n", type);
+	if (type >= DERAND_SOCK_ID_BASE){
+		u32 sc_id = (type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
+		u32 loc = (type - DERAND_SOCK_ID_BASE) >> 28;
+		derand_log("Before lock: sockcall %u (%u %u)\n", sc_id, loc >> 1, loc & 1);
+	}else 
+		derand_log("Before lock: event type %u\n", type);
+
 	if (evtq->h >= evtq->t){
-		derand_log("Error: more events than recorded, current event type: %u\n", type);
+		derand_log("Error: more events than recorded\n");
 		return;
 	}
 	// wait until the next event is this event acquiring lock
@@ -291,7 +297,7 @@ static void incoming_pkt_before_lock(struct sock *sk){
 	evtq = &r->evtq;
 	seq = &r->seq;
 
-	derand_log("incoming pkt is going to acquire lock\n");
+	derand_log("Before lock: incoming pkt\n");
 	// wait until either (1) no more other types of events, or (2) the next event is packet
 	while (replay_ops.state == STARTED && !(evtq->h >= evtq->t || *seq < evtq->v[get_event_q_idx(evtq->h)].seq));
 }
@@ -315,38 +321,78 @@ static void tasklet_before_lock(struct sock *sk){
 /**************************************
  * hooks after lock
  *************************************/
-static inline void new_event(struct derand_replayer *r, u32 type){
+#if DERAND_DEBUG
+// function for checking general event sequence
+// will increment geq.h
+static inline void check_geq(const struct sock *sk, u32 current_ge_type, u64 data){
+	struct derand_replayer *r = sk->replayer;
+	if (r->geq.h < r->geq.t){
+		u32 ge_type = r->geq.v[get_geq_idx(r->geq.h)].type;
+		u64 ge_data = *(u64*)r->geq.v[get_geq_idx(r->geq.h)].data;
+		char ge_name[32], current_ge_name[32];
+		if (ge_type != current_ge_type)
+			derand_log("Mismatch: %u-th ge type: %s != %s\n", r->geq.h, get_ge_name(ge_type, ge_name), get_ge_name(current_ge_type, current_ge_name));
+		else if (ge_data != data)
+			derand_log("Mismatch: %u-th ge data: %lu != %lu (type %u)\n", r->geq.h, ge_data, data, get_ge_name(ge_type, ge_name));
+		r->geq.h++;
+	}else 
+		derand_log("Mismatch: more ge than recorded\n");
+}
+#endif /* DERAND_DEBUG */
+static inline void new_event(struct sock *sk, u32 type){
+	struct derand_replayer *r = (struct derand_replayer*)sk->replayer;
 	if (!r)
 		return;
 
-	derand_log("event type %u acquires the lock!\n", type);
-	if (type != EVENT_TYPE_PACKET)
-		r->evtq.h++;
+	if (type >= DERAND_SOCK_ID_BASE){
+		u32 sc_id = (type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
+		u32 loc = (type - DERAND_SOCK_ID_BASE) >> 28;
+		derand_log("After lock: sockcall %u (%u %u)\n", sc_id, loc >> 1, loc & 1);
+	}else 
+		derand_log("After lock: event type %u\n", type);
+
+	#if DERAND_DEBUG
+	// check dbg_data
+	if (r->evtq.h < r->evtq.t){
+		u32 ori = r->evtq.v[get_event_q_idx(r->evtq.h)].dbg_data, rep = tcp_sk(sk)->write_seq;
+		if (ori != rep)
+			derand_log("Mismatch: write_seq %u != %u\n");
+	}
+
+	// check general event sequence
+	//check_geq(sk, 0, type);
+	#endif
+
+	r->evtq.h++;
 	r->seq++;
 }
 
 static void sockcall_lock(struct sock *sk, u32 sc_id){
-	new_event(sk->replayer, sc_id + DERAND_SOCK_ID_BASE);
+	new_event(sk, sc_id + DERAND_SOCK_ID_BASE);
 }
 
 static void incoming_pkt(struct sock *sk){
-	new_event(sk->replayer, EVENT_TYPE_PACKET);
+	struct derand_replayer *r = (struct derand_replayer*)sk->replayer;
+	if (!r)
+		return;
+	derand_log("After lock: incoming pkt\n");
+	r->seq++;
 }
 
 static void write_timer(struct sock *sk){
-	new_event(sk->replayer, EVENT_TYPE_WRITE_TIMEOUT);
+	new_event(sk, EVENT_TYPE_WRITE_TIMEOUT);
 }
 
 static void delack_timer(struct sock *sk){
-	new_event(sk->replayer, EVENT_TYPE_DELACK_TIMEOUT);
+	new_event(sk, EVENT_TYPE_DELACK_TIMEOUT);
 }
 
 static void keepalive_timer(struct sock *sk){
-	new_event(sk->replayer, EVENT_TYPE_KEEPALIVE_TIMEOUT);
+	new_event(sk, EVENT_TYPE_KEEPALIVE_TIMEOUT);
 }
 
 static void tasklet(struct sock *sk){
-	new_event(sk->replayer, EVENT_TYPE_TASKLET);
+	new_event(sk, EVENT_TYPE_TASKLET);
 }
 
 /************************************
@@ -354,8 +400,12 @@ static void tasklet(struct sock *sk){
  ***********************************/
 static unsigned long replay_jiffies(const struct sock *sk, int id){
 	struct jiffies_q *jfq = &((struct derand_replayer*)sk->replayer)->jfq;
+	#if DERAND_DEBUG
+	// check general event sequence
+	check_geq(sk, 1, id);
+	#endif
 	if (jfq->h >= jfq->t){
-		derand_log("more jiffies reads then recorded\n");
+		derand_log("Warning: more jiffies reads then recorded\n");
 		return jfq->last_jiffies;
 	}
 	if (jfq->h == 0){
@@ -375,19 +425,21 @@ static unsigned long replay_jiffies(const struct sock *sk, int id){
 
 static bool replay_tcp_under_memory_pressure(const struct sock *sk){
 	struct memory_pressure_q *mpq = &((struct derand_replayer*)sk->replayer)->mpq;
-	if (mpq->h < mpq->t && mpq->v[get_mp_q_idx(mpq->h)] == mpq->seq){
-		mpq->seq++;
+	bool ret;
+	if ((ret = (mpq->h < mpq->t && mpq->v[get_mp_q_idx(mpq->h)] == mpq->seq)))
 		mpq->h++;
-		return true;
-	}
 	mpq->seq++;
-	return false;
+	#if DERAND_DEBUG
+	// check general event sequence
+	check_geq(sk, 2, ret);
+	#endif
+	return ret;
 }
 
 static long replay_sk_memory_allocated(const struct sock *sk){
 	struct memory_allocated_q *maq = &((struct derand_replayer*)sk->replayer)->maq;
 	if (maq->h >= maq->t){
-		derand_log("more memory_allocated reads than recorded\n");
+		derand_log("Warning: more memory_allocated reads than recorded\n");
 		return maq->last_v;
 	}
 	if (maq->h == 0){
@@ -402,13 +454,30 @@ static long replay_sk_memory_allocated(const struct sock *sk){
 			maq->h++;
 		}
 	}
+	#if DERAND_DEBUG
+	// check general event sequence
+	check_geq(sk, 3, maq->last_v);
+	#endif
 	return maq->last_v;
+}
+
+static int replay_sk_socket_allocated_read_positive(struct sock *sk){
+	derand_log("Warning: replay_sk_socket_allocated_read_positive() not implemented\n");
+	#if DERAND_DEBUG
+	// check general event sequence
+	check_geq(sk, 4, 1);
+	#endif
+	return 1;
 }
 
 static void replay_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int loc){
 	struct mstamp_q *msq = &((struct derand_replayer*)sk->replayer)->msq;
+	#if DERAND_DEBUG
+	// check general event sequence
+	check_geq(sk, 5, loc);
+	#endif
 	if (msq->h >= msq->t){
-		derand_log("more skb_mstamp_get than recorded\n");
+		derand_log("Warning: more skb_mstamp_get than recorded\n");
 		*cl = msq->v[get_mstamp_q_idx(msq->t - 1)];
 		return;
 	}
@@ -420,7 +489,7 @@ static bool replay_effect_bool(const struct sock *sk, int loc){
 	struct effect_bool_q *ebq = &((struct derand_replayer*)sk->replayer)->ebq[loc];
 	u32 idx, bit_idx, arr_idx;
 	if (ebq->h >= ebq->t){
-		derand_log("more effect_bool %d than recorded\n", loc);
+		derand_log("Warning: more effect_bool %d than recorded\n", loc);
 		idx = get_eb_q_idx(ebq->t - 1);
 	}else{
 		idx = get_eb_q_idx(ebq->h);
@@ -428,7 +497,16 @@ static bool replay_effect_bool(const struct sock *sk, int loc){
 	}
 	bit_idx = idx & 31;
 	arr_idx = idx / 32;
+	#if DERAND_DEBUG
+	// check general event sequence
+	if (loc != 0) // loc 0 is not serializable among all events, but just within incoming packets
+		check_geq(sk, 6 + loc, (ebq->v[arr_idx] >> bit_idx) & 1);
+	#endif
 	return (ebq->v[arr_idx] >> bit_idx) & 1;
+}
+
+static void replay_general_event(const struct sock *sk, int loc, u64 data){
+	check_geq(sk, loc + 1000, data);
 }
 
 /****************************************
@@ -452,7 +530,7 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 	{
 		struct iphdr *iph = ip_hdr(skb);
 		struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
-		derand_log("received pkt: ipid: %hu seq: %hu ack: %hu\n", ntohs(iph->id), ntohl(tcph->seq), ntohl(tcph->ack_seq));
+		derand_log("Received pkt: ipid: %hu seq: %hu ack: %hu\n", ntohs(iph->id), ntohl(tcph->seq), ntohl(tcph->ack_seq));
 	}
 	// TODO: check if we should drop or mark CE bit
 
@@ -510,8 +588,11 @@ int bind_replay_ops(void){
 	derand_record_ops.replay_tcp_under_memory_pressure = replay_tcp_under_memory_pressure;
 	derand_record_ops.replay_sk_under_memory_pressure = replay_tcp_under_memory_pressure;
 	derand_record_ops.replay_sk_memory_allocated = replay_sk_memory_allocated;
-	derand_record_ops.replay_sk_socket_allocated_read_positive = NULL; // TODO: to add
+	derand_record_ops.replay_sk_socket_allocated_read_positive = replay_sk_socket_allocated_read_positive;
 	derand_record_ops.skb_mstamp_get = replay_skb_mstamp_get;
+	#if DERAND_DEBUG
+	derand_record_ops.general_event = replay_general_event;
+	#endif
 	derand_replay_effect_bool = replay_effect_bool;
 
 	/* The recorder_create functions must be bind last, because they are the enabler of record */
@@ -558,6 +639,10 @@ static void initialize_replay(struct derand_replayer *r){
 	for (i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		r->ebq[i].h = 0;
 
+	#if DERAND_DEBUG
+	r->geq.h = 0;
+	#endif
+
 	//derand_log("%u %u %u %u %u\n", r->evtq.t, r->jfq.t, r->mpq.t, r->maq.t, r->msq.t);
 }
 
@@ -579,11 +664,11 @@ int replay_ops_start(struct derand_replayer *addr){
 }
 
 void replay_ops_stop(void){
-	derand_log("unbind_replay_ops\n");
-	unbind_replay_ops();
-
 	if (replay_ops.state == STARTED)
 		replay_ops.state = SHOULD_STOP;
+
+	derand_log("unbind_replay_ops\n");
+	unbind_replay_ops();
 
 	// wait for stop kthread to stop
 	derand_log("wait for kthread to stop\n");

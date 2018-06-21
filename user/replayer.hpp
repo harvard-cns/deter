@@ -21,6 +21,9 @@ public:
 	int convert_memory_allocated();
 	int convert_mstamp();
 	int convert_effect_bool();
+	#if DERAND_DEBUG
+	int convert_general_event();
+	#endif
 
 	/* start the server side replay */
 	int start_replay_server();

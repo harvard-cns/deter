@@ -51,6 +51,15 @@ struct effect_bool_q{
 };
 #define get_eb_q_idx(i) ((i) & (EFFECT_BOOL_Q_LEN - 1))
 
+#if DERAND_DEBUG
+#define GENERAL_EVENT_Q_LEN 131072
+struct GeneralEventQ{
+	u32 h, t;
+	struct GeneralEvent v[GENERAL_EVENT_Q_LEN];
+};
+#define get_geq_idx(i) ((i) & (GENERAL_EVENT_Q_LEN - 1))
+#endif /* DERAND_DEBUG */
+
 struct derand_replayer{
 	struct tcp_sock_init_data init_data; // initial values for tcp_sock
 	u32 seq;
@@ -61,6 +70,9 @@ struct derand_replayer{
 	struct memory_allocated_q maq;
 	struct mstamp_q msq;
 	struct effect_bool_q ebq[DERAND_EFFECT_BOOL_N_LOC]; // effect_bool
+	#if DERAND_DEBUG
+	struct GeneralEventQ geq;
+	#endif
 };
 
 #endif /* _SHARED_DATA_STRUCT__DERAND_REPLAYER_H */

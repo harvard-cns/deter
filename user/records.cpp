@@ -161,29 +161,10 @@ void Records::print(FILE* fout){
 	fprintf(fout, "%lu events\n", evts.size());
 	for (int i = 0; i < evts.size(); i++){
 		derand_event &e = evts[i];
-		fprintf(fout, "%u ", e.seq);
-		if (e.type == EVENT_TYPE_PACKET)
-			fprintf(fout, "pkt");
-		else if (e.type == EVENT_TYPE_TASKLET)
-			fprintf(fout, "tasklet");
-		else if (e.type == EVENT_TYPE_WRITE_TIMEOUT)
-			fprintf(fout, "write_timeout");
-		else if (e.type == EVENT_TYPE_DELACK_TIMEOUT)
-			fprintf(fout, "delack_timeout");
-		else if (e.type == EVENT_TYPE_KEEPALIVE_TIMEOUT)
-			fprintf(fout, "keepalive_timeout");
-		else if (e.type == EVENT_TYPE_FINISH)
-			fprintf(fout, "finish");
-		else{
-			uint32_t idx = (e.type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
-			uint32_t loc = (e.type - DERAND_SOCK_ID_BASE) >> 28;
-			fprintf(fout, "sockcall %u: ", idx);
-			if (sockcalls[idx].type == DERAND_SOCKCALL_TYPE_SENDMSG)
-				fprintf(fout, "sendmsg");
-			else if (sockcalls[idx].type == DERAND_SOCKCALL_TYPE_RECVMSG)
-				fprintf(fout, "recvmsg ");
-			fprintf(fout, "loc: (%u %u)", loc>>1, loc&1);
-		}
+		char buf[32];
+		fprintf(fout, "%u %s", e.seq, get_event_name(e.type, buf));
+		if (e.type >= DERAND_SOCK_ID_BASE)
+			fprintf(fout, " %s", get_sockcall_str(&sockcalls[get_sockcall_idx(e.type)], buf));
 
 		#if DERAND_DEBUG
 		fprintf(fout, " %u", e.dbg_data);
@@ -227,22 +208,16 @@ void Records::print(FILE* fout){
 	#if DERAND_DEBUG
 	fprintf(fout, "%lu general events\n", geq.size());
 	for (int i = 0; i < geq.size(); i++){
-		u8 type = geq[i].type;
+		u32 type = geq[i].type;
+		u64 data = *(u64*)geq[i].data;
+		char buf[32];
+		fprintf(fout, "%d ", i);
 		// 0: evtq; 1: jfq; 2: mpq; 3: maq; 4: saq; 5: msq; 6 ~ 6+DERAND_EFFECT_BOOL_N_LOC-1: ebq
+		fprintf(fout, "%s", get_ge_name(type, buf));
 		if (type == 0)
-			fprintf(fout, "evtq");
-		else if (type == 1)
-			fprintf(fout, "jfq");
-		else if (type == 2)
-			fprintf(fout, "mpq");
-		else if (type == 3)
-			fprintf(fout, "maq");
-		else if (type == 4)
-			fprintf(fout, "saq");
-		else if (type == 5)
-			fprintf(fout, "msq");
-		else 
-			fprintf(fout, "ebq %u", type - 6);
+			fprintf(fout, " %s", get_event_name(data, buf));
+		else
+			fprintf(fout, " %lu", data);
 		fprintf(fout, "\n");
 	}
 	#endif
@@ -251,6 +226,7 @@ void Records::print(FILE* fout){
 void Records::print_init_data(FILE* fout){
 	tcp_sock_init_data *d = &init_data;
 	fprintf(fout, "tcp_header_len = %u\n", d->tcp_header_len);
+	fprintf(fout, "pred_flags = %u\n", d->pred_flags);
 	fprintf(fout, "segs_in = %u\n", d->segs_in);
 	fprintf(fout, "rcv_nxt = %u\n", d->rcv_nxt);
 	fprintf(fout, "copied_seq = %u\n", d->copied_seq);
@@ -258,12 +234,14 @@ void Records::print_init_data(FILE* fout){
 	fprintf(fout, "snd_nxt = %u\n", d->snd_nxt);
 	fprintf(fout, "snd_una = %u\n", d->snd_una);
 	fprintf(fout, "snd_sml = %u\n", d->snd_sml);
+	fprintf(fout, "rcv_tstamp = %u\n", d->rcv_tstamp);
 	fprintf(fout, "lsndtime = %u\n", d->lsndtime);
 	fprintf(fout, "snd_wl1 = %u\n", d->snd_wl1);
 	fprintf(fout, "snd_wnd = %u\n", d->snd_wnd);
 	fprintf(fout, "max_window = %u\n", d->max_window);
 	fprintf(fout, "window_clamp = %u\n", d->window_clamp);
 	fprintf(fout, "rcv_ssthresh = %u\n", d->rcv_ssthresh);
+	fprintf(fout, "advmss = %u\n", d->advmss);
 	fprintf(fout, "srtt_us = %u\n", d->srtt_us);
 	fprintf(fout, "mdev_us = %u\n", d->mdev_us);
 	fprintf(fout, "mdev_max_us = %u\n", d->mdev_max_us);
@@ -276,6 +254,8 @@ void Records::print_init_data(FILE* fout){
 	fprintf(fout, "snd_up = %u\n", d->snd_up);
 	fprintf(fout, "rx_opt.ts_recent_stamp = %ld\n", d->rx_opt.ts_recent_stamp);
 	fprintf(fout, "rx_opt.ts_recent = %u\n", d->rx_opt.ts_recent);
+	fprintf(fout, "rx_opt.rcv_tsval = %u\n", d->rx_opt.rcv_tsval);
+	fprintf(fout, "rx_opt.rcv_tsecr = %u\n", d->rx_opt.rcv_tsecr);
 	fprintf(fout, "rx_opt.saw_tstamp = %u\n", d->rx_opt.saw_tstamp);
 	fprintf(fout, "rx_opt.tstamp_ok = %u\n", d->rx_opt.tstamp_ok);
 	fprintf(fout, "rx_opt.dsack = %u\n", d->rx_opt.dsack);
@@ -283,16 +263,37 @@ void Records::print_init_data(FILE* fout){
 	fprintf(fout, "rx_opt.sack_ok = %u\n", d->rx_opt.sack_ok);
 	fprintf(fout, "rx_opt.snd_wscale = %u\n", d->rx_opt.snd_wscale);
 	fprintf(fout, "rx_opt.rcv_wscale = %u\n", d->rx_opt.rcv_wscale);
+	fprintf(fout, "rx_opt.num_sacks = %hhu\n", d->rx_opt.num_sacks);
+	fprintf(fout, "rx_opt.user_mss = %hhu\n", d->rx_opt.user_mss);
 	fprintf(fout, "rx_opt.mss_clamp = %u\n", d->rx_opt.mss_clamp);
 	fprintf(fout, "snd_cwnd_stamp = %u\n", d->snd_cwnd_stamp);
 	fprintf(fout, "rcv_wnd = %u\n", d->rcv_wnd);
 	fprintf(fout, "write_seq = %u\n", d->write_seq);
 	fprintf(fout, "pushed_seq = %u\n", d->pushed_seq);
 	fprintf(fout, "total_retrans = %u\n", d->total_retrans);
+	fprintf(fout, "rcv_rtt_est = {%u, %u, %u}\n", d->rcv_rtt_est.rtt, d->rcv_rtt_est.seq, d->rcv_rtt_est.time);
+	fprintf(fout, "rcvq_space = {%d, %u, %u}\n", d->rcvq_space.space, d->rcvq_space.seq, d->rcvq_space.time);
 	fprintf(fout, "icsk_rto = %u\n", d->icsk_rto);
 	fprintf(fout, "icsk_ack.lrcvtime = %u\n", d->icsk_ack.lrcvtime);
 	fprintf(fout, "icsk_ack.last_seg_size = %u\n", d->icsk_ack.last_seg_size);
+	fprintf(fout, "icsk_ack.pending = %hhu\n", d->icsk_ack.pending);
+	fprintf(fout, "icsk_ack.quick = %hhu\n", d->icsk_ack.quick);
+	fprintf(fout, "icsk_ack.pingpong = %hhu\n", d->icsk_ack.pingpong);
+	fprintf(fout, "icsk_ack.blocked = %hhu\n", d->icsk_ack.blocked);
+	fprintf(fout, "icsk_ack.ato = %u\n", d->icsk_ack.ato);
+	fprintf(fout, "icsk_ack.timeout = %lu\n", d->icsk_ack.timeout);
+	fprintf(fout, "icsk_ack.lrcvtime = %u\n", d->icsk_ack.lrcvtime);
+	fprintf(fout, "icsk_ack.last_seg_size = %hu\n", d->icsk_ack.last_seg_size);
+	fprintf(fout, "icsk_ack.rcv_mss = %hu\n", d->icsk_ack.rcv_mss);
+	fprintf(fout, "icsk_mtup.enabled = %d\n", d->icsk_mtup.enabled);
+	fprintf(fout, "icsk_mtup.search_high = %d\n", d->icsk_mtup.search_high);
+	fprintf(fout, "icsk_mtup.search_low = %d\n", d->icsk_mtup.search_low);
+	fprintf(fout, "icsk_mtup.probe_size = %d\n", d->icsk_mtup.probe_size);
+	fprintf(fout, "icsk_mtup.probe_timestamp = %u\n", d->icsk_mtup.probe_timestamp);
+	fprintf(fout, "sk_rcvbuf = %d\n", d->sk_rcvbuf);
+	fprintf(fout, "sk_sndbuf = %d\n", d->sk_sndbuf);
 	fprintf(fout, "sk_userlocks = %u\n", d->sk_userlocks);
+	fprintf(fout, "sk_pacing_rate = %u\n", d->sk_pacing_rate);
 }
 
 void Records::clear(){

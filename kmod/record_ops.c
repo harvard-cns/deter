@@ -92,7 +92,7 @@ static inline void new_event(struct sock *sk, u32 type){
 
 	// enqueue the new event
 	#if DERAND_DEBUG
-	add_geq(&rec->geq, 0);
+	//add_geq(&rec->geq, 0, type);
 	rec->evts[get_evt_q_idx(rec->evt_t)] = (struct derand_event){.seq = seq, .type = type, .dbg_data = tcp_sk(sk)->write_seq};
 	#else
 	rec->evts[get_evt_q_idx(rec->evt_t)] = (struct derand_event){.seq = seq, .type = type};
@@ -205,7 +205,7 @@ static void tasklet(struct sock *sk){
 static void read_jiffies(const struct sock *sk, unsigned long v, int id){
 	struct jiffies_q *jf = &((struct derand_recorder*)sk->recorder)->jf;
 	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)sk->recorder)->geq, 1);
+	add_geq(&((struct derand_recorder*)sk->recorder)->geq, 1, id);
 	#endif
 	if (jf->t == 0){ // this is the first jiffies read
 		jf->v[0].init_jiffies = v;
@@ -225,14 +225,14 @@ static void read_jiffies(const struct sock *sk, unsigned long v, int id){
 
 static void record_tcp_under_memory_pressure(const struct sock *sk, bool ret){
 	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 2);
+	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 2, ret);
 	#endif
 	push_memory_pressure_q(&((struct derand_recorder*)(sk->recorder))->mpq, ret);
 }
 
 static void record_sk_under_memory_pressure(const struct sock *sk, bool ret){
 	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 2);
+	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 2, ret);
 	#endif
 	push_memory_pressure_q(&((struct derand_recorder*)(sk->recorder))->mpq, ret);
 }
@@ -240,7 +240,7 @@ static void record_sk_under_memory_pressure(const struct sock *sk, bool ret){
 static void record_sk_memory_allocated(const struct sock *sk, long ret){
 	struct memory_allocated_q *maq = &((struct derand_recorder*)sk->recorder)->maq;
 	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 3);
+	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 3, ret);
 	#endif
 	if (maq->t == 0){ // this is the first read to memory_allocated
 		maq->v[0].init_v = ret;
@@ -261,7 +261,7 @@ static void record_sk_memory_allocated(const struct sock *sk, long ret){
 static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){
 	struct derand_recorder *rec = sk->recorder;
 	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 4);
+	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 4, ret);
 	#endif
 	rec->n_sockets_allocated++;
 }
@@ -269,7 +269,7 @@ static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){
 static void record_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int loc){
 	struct mstamp_q *msq = &((struct derand_recorder*)sk->recorder)->msq;
 	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 5);
+	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 5, loc);
 	#endif
 	msq->v[get_mstamp_q_idx(msq->t)] = *cl;
 	msq->t++;
@@ -277,10 +277,17 @@ static void record_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int lo
 
 static void record_effect_bool(const struct sock *sk, int loc, bool v){
 	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 6 + loc);
+	if (loc != 0) // loc 0 is not serializable among all events, but just within incoming packets
+		add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 6 + loc, v);
 	#endif
 	push_effect_bool_q(&((struct derand_recorder*)sk->recorder)->ebq[loc], v);
 }
+
+#if DERAND_DEBUG
+static void record_general_event(const struct sock *sk, int loc, u64 data){
+	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, loc + 1000, data);
+}
+#endif
 
 int bind_record_ops(void){
 	derand_record_ops.recorder_destruct = recorder_destruct;
@@ -300,6 +307,9 @@ int bind_record_ops(void){
 	derand_record_ops.sk_memory_allocated = record_sk_memory_allocated;
 	derand_record_ops.sk_sockets_allocated_read_positive = record_sk_sockets_allocated_read_positive;
 	derand_record_ops.skb_mstamp_get = record_skb_mstamp_get;
+	#if DERAND_DEBUG
+	derand_record_ops.general_event = record_general_event;
+	#endif
 	derand_record_effect_bool = record_effect_bool;
 
 	/* The recorder_create functions must be bind last, because they are the enabler of record */
