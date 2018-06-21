@@ -8,43 +8,47 @@
 
 using namespace std;
 
+#define COPY_ONCE 1
+
 Replayer::Replayer(): d(NULL) {}
 
 int Replayer::convert_event(){
 	auto &s = rec.evts;
-	if (s.size() > EVENT_Q_LEN){
-		fprintf(stderr, "too many events: %lu > %u\n", s.size(), EVENT_Q_LEN);
+	u64 size = s.size();
+	if (size > EVENT_Q_LEN){
+		fprintf(stderr, "too many events: %lu > %u\n", size, EVENT_Q_LEN);
 		return -1;
 	}
 	d->evtq.h = 0;
-	d->evtq.t = s.size();
-	memcpy(d->evtq.v, &s[0], sizeof(derand_event) * s.size());
+	d->evtq.t = size;
+	memcpy(d->evtq.v, &s[0], sizeof(derand_event) * size);
 	return 0;
 }
 
 int Replayer::convert_jiffies(){
 	auto &s = rec.jiffies;
-	if (s.size() > JIFFIES_Q_LEN){
-		fprintf(stderr, "too many jiffies: %lu > %u\n", s.size(), EVENT_Q_LEN);
+	u64 size = s.size();
+	if (size > JIFFIES_Q_LEN){
+		fprintf(stderr, "too many jiffies: %lu > %u\n", size, EVENT_Q_LEN);
 		return -1;
 	}
 	d->jfq.h = 0;
-	d->jfq.t = s.size();
-	memcpy(d->jfq.v, &s[0], sizeof(jiffies_rec) * s.size());
+	d->jfq.t = size;
+	memcpy(d->jfq.v, &s[0], sizeof(jiffies_rec) * size);
 	return 0;
 }
 
 int Replayer::convert_memory_pressure(){
-	d->mpq.h = d->mpq.t = 0;
-	for (uint32_t i = 0, ib = 0; ib < rec.memory_pressures.n; i++)
-		for (uint32_t j = 0; j < 32 && ib < rec.memory_pressures.n; j++, ib++)
-			if ((rec.memory_pressures.v[i] >> j) & 1)
-				if (d->mpq.t == MEMORY_PRESSURE_Q_LEN){
-					fprintf(stderr, "too many memory_pressure==1\n");
-					return -1;
-				}
-				else 
-					d->mpq.v[d->mpq.t++] = ib;
+	auto &s = rec.mpq.v;
+	u64 size = s.size();
+	if (size > MEMORY_PRESSURE_Q_LEN){
+		fprintf(stderr, "too many memory pressures: %lu > %u\n", size, MEMORY_PRESSURE_Q_LEN);
+		return -1;
+	}
+	d->mpq.h = 0;
+	d->mpq.t = size;
+	memcpy(d->mpq.v, &s[0], sizeof(uint32_t) * size);
+
 	return 0;
 }
 
@@ -74,7 +78,7 @@ int Replayer::convert_mstamp(){
 
 int Replayer::convert_effect_bool(){
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
-		auto &s = rec.effect_bool[i];
+		auto &s = rec.ebq[i];
 		if (s.n > EFFECT_BOOL_Q_LEN){
 			fprintf(stderr, "too many effect_bool %d: %u > %u\n", i, s.n, EFFECT_BOOL_Q_LEN);
 			return -1;
@@ -105,6 +109,9 @@ int Replayer::read_records(const string &record_file_name){
 		fprintf(stderr, "cannot read file: %s\n", record_file_name.c_str());
 		return -1;
 	}
+
+	// make sure records is in final format
+	rec.transform();
 
 	// make d out of rec
 	d->init_data = rec.init_data;

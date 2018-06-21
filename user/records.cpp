@@ -26,6 +26,11 @@ int read_vector(vector<T> &v, FILE *fin){
 	return 1;
 }
 
+void Records::transform(){
+	// transform mpq
+	mpq.transform_to_idx_one();
+}
+
 int Records::dump(const char* filename){
 	int ret;
 	uint32_t len;
@@ -36,6 +41,9 @@ int Records::dump(const char* filename){
 		fout = fopen(buf, "w");
 	}else 
 		fout = fopen(filename, "w");
+
+	// transform raw data into final format 
+	transform();
 
 	// write 4 tuples
 	if (!fwrite(&sip, sizeof(sip)+sizeof(dip)+sizeof(sport)+sizeof(dport), 1, fout))
@@ -58,7 +66,7 @@ int Records::dump(const char* filename){
 		goto fail_write;
 
 	// write memory_pressures
-	if (!memory_pressures.dump(fout))
+	if (!mpq.dump(fout))
 		goto fail_write;
 
 	// write memory_allocated
@@ -75,7 +83,7 @@ int Records::dump(const char* filename){
 
 	// write effect_bool
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
-		if (!effect_bool[i].dump(fout))
+		if (!ebq[i].dump(fout))
 			goto fail_write;
 
 	#if DERAND_DEBUG
@@ -115,7 +123,7 @@ int Records::read(const char* filename){
 		goto fail_read;
 
 	// read memory_pressures
-	if (!memory_pressures.read(fin))
+	if (!mpq.read(fin))
 		goto fail_read;
 
 	// read memory_allocated
@@ -132,7 +140,7 @@ int Records::read(const char* filename){
 
 	// read effect_bool
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
-		if (!effect_bool[i].read(fin))
+		if (!ebq[i].read(fin))
 			goto fail_read;
 
 	#if DERAND_DEBUG
@@ -178,9 +186,8 @@ void Records::print(FILE* fout){
 			fprintf(fout, "%u %u\n", jiffies[i].idx_delta, jiffies[i].jiffies_delta);
 	}
 
-	fprintf(fout, "%u memory_pressures read %lu\n", memory_pressures.n, memory_pressures.v.size());
-	for (int i = 0; i < memory_pressures.v.size(); i++)
-		fprintf(fout, "%08x\n", memory_pressures.v[i]);
+	fprintf(fout, "memory_pressure:\n");
+	mpq.print(fout);
 
 	fprintf(fout, "%lu new values of reading memory_allocated\n", memory_allocated.size());
 	if (memory_allocated.size() > 0){
@@ -196,7 +203,7 @@ void Records::print(FILE* fout){
 		fprintf(fout, "%u %u\n", mstamp[i].stamp_us, mstamp[i].stamp_jiffies);
 
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
-		auto &eb = effect_bool[i];
+		auto &eb = ebq[i];
 		fprintf(fout, "effect_bool %d: %u reads %lu\n", i, eb.n, eb.v.size());
 		for (int j = 0; j < eb.v.size(); j++){
 			for (uint32_t k = 0, b = eb.v[j]; k < 32; k++, b>>=1)
@@ -300,12 +307,12 @@ void Records::clear(){
 	evts.clear();
 	sockcalls.clear();
 	jiffies.clear();
-	memory_pressures.clear();
+	mpq.clear();
 	memory_allocated.clear();
 	n_sockets_allocated = 0;
 	mstamp.clear();
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
-		effect_bool[i].clear();
+		ebq[i].clear();
 	#if DERAND_DEBUG
 	geq.clear();
 	#endif

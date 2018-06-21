@@ -81,7 +81,7 @@ int main()
 				rec->jf.h = j;
 				// copy memory pressure
 				for (j = rec->mpq.h; j < (rec->mpq.t & (~31)); j += 32)
-					res[i].memory_pressures.push_back(rec->mpq.v[get_memory_pressure_q_idx(j) / 32]);
+					res[i].mpq.push_back(rec->mpq.v[get_memory_pressure_q_idx(j) / 32]);
 				rec->mpq.h = j;
 				// copy memory_allocated
 				for (j = rec->maq.h; j < rec->maq.t; j++)
@@ -96,7 +96,7 @@ int main()
 				for (int k = 0; k < DERAND_EFFECT_BOOL_N_LOC; k++){
 					effect_bool_q &ebq = rec->ebq[k];
 					for (j = ebq.h; j < (ebq.t & (~31)); j += 32)
-						res[i].effect_bool[k].push_back(ebq.v[get_effect_bool_q_idx(j) / 32]);
+						res[i].ebq[k].push_back(ebq.v[get_effect_bool_q_idx(j) / 32]);
 					ebq.h = j;
 				}
 				#if DERAND_DEBUG
@@ -119,8 +119,8 @@ int main()
 
 					// copy the last few bits for memory pressure
 					if (rec->mpq.t & 31)
-						res[i].memory_pressures.push_back(rec->mpq.v[get_memory_pressure_q_idx(rec->mpq.t) / 32]);
-					res[i].memory_pressures.n = rec->mpq.t;
+						res[i].mpq.push_back(rec->mpq.v[get_memory_pressure_q_idx(rec->mpq.t) / 32]);
+					res[i].mpq.n = rec->mpq.t;
 
 					// record the last idx_delta for memory_allocated
 					if (rec->maq.idx_delta > 0){
@@ -136,8 +136,8 @@ int main()
 					for (int k = 0; k < DERAND_EFFECT_BOOL_N_LOC; k++){
 						effect_bool_q &ebq = rec->ebq[k];
 						if (ebq.t & 31)
-							res[i].effect_bool[k].push_back(ebq.v[get_effect_bool_q_idx(ebq.t) / 32]);
-						res[i].effect_bool[k].n = ebq.t;
+							res[i].ebq[k].push_back(ebq.v[get_effect_bool_q_idx(ebq.t) / 32]);
+						res[i].ebq[k].n = ebq.t;
 					}
 
 					printf("%u %d\n", rec->evt_t, rec->sockcall_id.counter);
