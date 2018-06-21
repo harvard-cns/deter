@@ -326,17 +326,19 @@ static void tasklet_before_lock(struct sock *sk){
 // will increment geq.h
 static inline void check_geq(const struct sock *sk, u32 current_ge_type, u64 data){
 	struct derand_replayer *r = sk->replayer;
+	char ge_name[32], current_ge_name[32];
 	if (r->geq.h < r->geq.t){
 		u32 ge_type = r->geq.v[get_geq_idx(r->geq.h)].type;
 		u64 ge_data = *(u64*)r->geq.v[get_geq_idx(r->geq.h)].data;
-		char ge_name[32], current_ge_name[32];
 		if (ge_type != current_ge_type)
-			derand_log("Mismatch: %u-th ge type: %s != %s\n", r->geq.h, get_ge_name(ge_type, ge_name), get_ge_name(current_ge_type, current_ge_name));
+			derand_log("Mismatch: %u-th ge type: %s (%lu) != %s (%lu)\n", r->geq.h, get_ge_name(ge_type, ge_name), ge_data, get_ge_name(current_ge_type, current_ge_name), data);
 		else if (ge_data != data)
 			derand_log("Mismatch: %u-th ge data: %lu != %lu (type %u)\n", r->geq.h, ge_data, data, get_ge_name(ge_type, ge_name));
+		else
+			derand_log("%u-th ge: %s (%lu)\n", r->geq.h, get_ge_name(current_ge_type, current_ge_name), data);
 		r->geq.h++;
 	}else 
-		derand_log("Mismatch: more ge than recorded\n");
+		derand_log("Mismatch: more ge than recorded. %u-th ge: %s (%lu)\n", r->geq.h, get_ge_name(current_ge_type, current_ge_name), data);
 }
 #endif /* DERAND_DEBUG */
 static inline void new_event(struct sock *sk, u32 type){
