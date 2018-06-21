@@ -28,8 +28,11 @@ int init_logger(void){
 	}
 
 	// init logger
-	logger->h = logger->t = 0;
+	memset(logger, 0, sizeof(struct Logger));
+	logger->h = 0;
+	atomic_set(&logger->t, 0);
 	logger->running = 1;
+	printk("logger->running = %u\n", logger->running);
 	spin_unlock(&logger_lock);
 
 	// expose through proc
@@ -57,14 +60,17 @@ void clear_logger(void){
 
 int derand_log(const char *fmt, ...){
 	int ret = 0;
+	u32 idx;
 	va_list args;
 	va_start(args, fmt);
-	spin_lock(&logger_lock);
+	//spin_lock(&logger_lock);
 	if (logger != NULL){
-		while (logger_full(logger)); // wait for available space
-		ret = vsprintf(logger->buf[get_logger_idx(logger->t)], fmt, args);
-		logger->t++;
+		while ((u32)atomic_read(&logger->t) - logger->h >= LOGGER_N_MSG); // wait for available space
+		idx = atomic_add_return(1, &logger->t) - 1;
+		ret = vsprintf(logger->buf[get_logger_idx(idx)] + 1, fmt, args); // the first char is used to indicate if the buffer is ready
+		logger->buf[get_logger_idx(idx)][0] = 1; // mark as ready
+		//logger->t++;
 	}
-	spin_unlock(&logger_lock);
+	//spin_unlock(&logger_lock);
 	return ret;
 }

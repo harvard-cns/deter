@@ -28,4 +28,5 @@ clean:
 	rm recorder
 	rm replay
 	rm reader
+	rm logger
 	rm *.o

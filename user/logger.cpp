@@ -12,8 +12,11 @@ int main(){
 	Logger *logger = (Logger*)kmem.buf;
 
 	while (logger->running){
-		if (logger->h < logger->t){
-			fprintf(stdout, "%s", logger->buf[get_logger_idx(logger->h)]);
+		if (logger->h < (u32)logger->t.counter){
+			volatile uint8_t &ready = logger->buf[get_logger_idx(logger->h)][0];
+			while (!ready); // wait for ready
+			fprintf(stdout, "%s", logger->buf[get_logger_idx(logger->h)] + 1);
+			ready = 0; // clear ready byte
 			logger->h++;
 		}
 	}
