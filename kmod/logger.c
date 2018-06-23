@@ -65,9 +65,16 @@ int derand_log(const char *fmt, ...){
 	va_start(args, fmt);
 	//spin_lock(&logger_lock);
 	if (logger != NULL){
-		while ((u32)atomic_read(&logger->t) - logger->h >= LOGGER_N_MSG); // wait for available space
+		//while ((u32)atomic_read(&logger->t) - logger->h >= LOGGER_N_MSG); // wait for available space
 		idx = atomic_add_return(1, &logger->t) - 1;
+		while (idx - logger->h >= LOGGER_N_MSG){ // wait until this space is available
+			// NOTE: we must give out this cpu while waiting if softirq is disabled, otherwise we cause deadlock!!!
+			// the reason is that user logger must print out (to screen or disk) before free up space, and print may need softirq!
+			if (in_softirq())
+				cond_resched_softirq();
+		}
 		ret = vsprintf(logger->buf[get_logger_idx(idx)] + 1, fmt, args); // the first char is used to indicate if the buffer is ready
+		wmb();
 		logger->buf[get_logger_idx(idx)][0] = 1; // mark as ready
 		//logger->t++;
 	}

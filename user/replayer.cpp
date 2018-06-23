@@ -8,7 +8,7 @@
 
 using namespace std;
 
-#define COPY_ONCE 1
+#define CONTINUOUS_COPY 1
 
 Replayer::Replayer(): d(NULL) {}
 
@@ -172,7 +172,17 @@ void sockcall_thread(int sockfd, derand_rec_sockcall sc, int id){
 	printf("sockcall %d finishes\n", id);
 }
 
+volatile int finished = 0;
+void monitor_thread(derand_replayer *d){
+	printf("%lx\n", (u64)d);
+	while (!finished){
+		printf("%u %u\n", d->seq, d->evtq.v[get_event_q_idx(d->evtq.h)].seq);
+		sleep(1);
+	}
+}
+
 void Replayer::start_replay(){
+	thread th(monitor_thread, d);
 	vector<thread> thread_pool;
 	volatile uint32_t &seq = d->seq;
 	volatile uint32_t &h = d->evtq.h;
@@ -191,9 +201,11 @@ void Replayer::start_replay(){
 	// wait for all sockcall to finish
 	for (int i = 0; i < thread_pool.size(); i++)
 		thread_pool[i].join();
+	finished = 1;
 	printf("wait to finish\n");
-	while (h < d->evtq.t - 1);
+	while (h < d->evtq.t);
 	printf("finish!\n");
+	close(sockfd);
 }
 
 /*

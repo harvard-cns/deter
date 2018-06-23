@@ -59,11 +59,13 @@ struct PacketQueue pkt_q;
 
 // enqueue
 static inline void enqueue(struct PacketQueue *q, struct sk_buff *skb, const struct nf_hook_state *state){
-	if (unlikely(q->t == q->h + PACKET_QUEUE_SIZE)){
+	if (unlikely(q->t >= q->h + PACKET_QUEUE_SIZE)){
 		derand_log("WARNING: PacketQueue full!\n");
 		return;
 	}
+	rmb();
 	q->q[get_pkt_q_idx(q->t)] = (struct Packet){.skb = skb, .sk = state->sk, .net = state->net, .okfn = state->okfn};
+	wmb();
 	q->t++;
 }
 
@@ -72,6 +74,7 @@ static int dequeue(struct PacketQueue *q){
 	struct Packet *p;
 	if (q->h >= q->t)
 		return -1;
+	rmb();
 	p = &q->q[get_pkt_q_idx(q->h)];
 
 	// because we are replaying bh events, we want to disable bh & preempt
@@ -92,6 +95,7 @@ static int dequeue(struct PacketQueue *q){
 int replay_kthread(void *args){
 	int i, n_pkt_btw;
 	struct event_q *evtq = &replay_ops.replayer->evtq;
+	u32 cnt = 0;
 	derand_log("replay_kthread started\n");
 
 	while (replay_ops.state == NOT_STARTED);
@@ -107,7 +111,7 @@ int replay_kthread(void *args){
 	 * */
 	for (i = 0, n_pkt_btw = 0; i < evtq->t && replay_ops.state == STARTED; i++){
 		// skip sockcall
-		if (evtq->v[i].type >= DERAND_SOCK_ID_BASE){
+		if (evtq->v[get_event_q_idx(i)].type >= DERAND_SOCK_ID_BASE){
 			n_pkt_btw--; // n_pkt_btw-- for every sockcall
 			continue;
 		}
@@ -116,7 +120,14 @@ int replay_kthread(void *args){
 
 		// send packets in between
 		for (; n_pkt_btw && replay_ops.state == STARTED; n_pkt_btw--){
-			while (replay_ops.state == STARTED && dequeue(&pkt_q));
+			cnt = 0;
+			while (replay_ops.state == STARTED && dequeue(&pkt_q)){
+				cnt++;
+				#if DERAND_DEBUG
+				if (!(cnt & 0x0fffffff))
+					derand_log("[kthread] long wait for pkt: irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", irqs_disabled(), in_interrupt(), local_softirq_pending());
+				#endif
+			}
 			derand_log("[kthread] sent a packet, %d remains\n", n_pkt_btw);
 		}
 
@@ -227,7 +238,10 @@ static void recorder_destruct(struct sock *sk){
 	struct derand_replayer *r = sk->replayer;
 	if (!r)
 		return;
-	replay_ops.state = SHOULD_STOP;
+	derand_log("recorder_destruct: h:%u t:%u\n", r->evtq.h, r->evtq.t);
+	r->evtq.h++;
+	if (replay_ops.state == STARTED)
+		replay_ops.state = SHOULD_STOP;
 }
 
 /****************************************
@@ -264,24 +278,46 @@ static inline void wait_before_lock(struct sock *sk, u32 type){
 	struct derand_replayer *r = (struct derand_replayer*)sk->replayer;
 	volatile struct event_q *evtq;
 	volatile u32 *seq;
+	u32 sc_id, loc;
+	#if DERAND_DEBUG
+	u32 cnt = 0;
+	#endif
 	if (!r)
 		return;
 	evtq = &r->evtq;
 	seq = &r->seq;
 
 	if (type >= DERAND_SOCK_ID_BASE){
-		u32 sc_id = (type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
-		u32 loc = (type - DERAND_SOCK_ID_BASE) >> 28;
-		derand_log("Before lock: sockcall %u (%u %u)\n", sc_id, loc >> 1, loc & 1);
+		sc_id = (type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
+		loc = (type - DERAND_SOCK_ID_BASE) >> 28;
+		derand_log("Before lock: sockcall %u (%u %u); irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", sc_id, loc >> 1, loc & 1, irqs_disabled(), in_interrupt(), local_softirq_pending());
 	}else 
-		derand_log("Before lock: event type %u\n", type);
+		derand_log("Before lock: event type %u; irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", type, irqs_disabled(), in_interrupt(), local_softirq_pending());
 
 	if (evtq->h >= evtq->t){
 		derand_log("Error: more events than recorded\n");
 		return;
 	}
 	// wait until the next event is this event acquiring lock
-	while (replay_ops.state == STARTED && !(*seq == evtq->v[get_event_q_idx(evtq->h)].seq && evtq->v[get_event_q_idx(evtq->h)].type == type));
+	while (replay_ops.state == STARTED && !(*seq == evtq->v[get_event_q_idx(evtq->h)].seq && evtq->v[get_event_q_idx(evtq->h)].type == type)){
+		// if this is in __release_sock, bh is disabled. We cannot busy wait here because it prevents softirq accepting new packets (NET_RX), which we are waiting for, causing deadlock!
+		if (type >= DERAND_SOCK_ID_BASE && in_softirq())
+			cond_resched_softirq();
+		#if DERAND_DEBUG
+		if (!(cnt & 0xffffff)){
+			volatile u32 *q_h = &pkt_q.h, *q_t = &pkt_q.t;
+			derand_log("long wait [%u %u]: pkt_q: %u %u; irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", *seq, evtq->v[get_event_q_idx(evtq->h)].seq, *q_h, *q_t, irqs_disabled(), in_interrupt(), local_softirq_pending());
+		}
+		cnt++;
+		#endif
+	}
+
+	if (type >= DERAND_SOCK_ID_BASE){
+		u32 sc_id = (type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
+		u32 loc = (type - DERAND_SOCK_ID_BASE) >> 28;
+		derand_log("finish wait lock: sockcall %u (%u %u)\n", sc_id, loc >> 1, loc & 1);
+	}else 
+		derand_log("finish wait lock: event type %u\n", type);
 }
 
 static void sockcall_before_lock(struct sock *sk, u32 sc_id){
@@ -292,14 +328,30 @@ static void incoming_pkt_before_lock(struct sock *sk){
 	struct derand_replayer *r = (struct derand_replayer*)sk->replayer;
 	volatile struct event_q *evtq;
 	volatile u32 *seq;
+	u32 seq_v, evtq_h_seq_v;
+	u32 cnt;
 	if (!r)
 		return;
 	evtq = &r->evtq;
 	seq = &r->seq;
 
 	derand_log("Before lock: incoming pkt\n");
-	// wait until either (1) no more other types of events, or (2) the next event is packet
-	while (replay_ops.state == STARTED && !(evtq->h >= evtq->t || *seq < evtq->v[get_event_q_idx(evtq->h)].seq));
+	while (replay_ops.state == STARTED){
+		// wait until either (1) no more other types of events, or (2) the next event is packet
+		// NOTE: evtq->v[get_event_q_idx(evtq->h)].seq must be before *seq
+		//       because if first read seq, then h, we might have read the old seq, then the new h, which points to a new place in v, thus giving v[h].seq > seq
+		//       but if first h then seq, the value of seq must be newer than h, so there won't be such bug
+		evtq_h_seq_v = evtq->v[get_event_q_idx(evtq->h)].seq;
+		rmb();
+		seq_v = *seq;
+		if (evtq->h >= evtq->t || evtq_h_seq_v > seq_v)
+			break;
+		cnt++;
+		if (!cnt){
+			volatile u32 *q_h = &pkt_q.h, *q_t = &pkt_q.t;
+			derand_log("long wait (pkt): pkt_q: %u %u; irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", *q_h, *q_t, irqs_disabled(), in_interrupt(), local_softirq_pending());
+		}
+	}
 }
 
 static void write_timer_before_lock(struct sock *sk){
@@ -334,8 +386,10 @@ static inline void check_geq(const struct sock *sk, u32 current_ge_type, u64 dat
 			derand_log("Mismatch: %u-th ge type: %s (%lu) != %s (%lu)\n", r->geq.h, get_ge_name(ge_type, ge_name), ge_data, get_ge_name(current_ge_type, current_ge_name), data);
 		else if (ge_data != data)
 			derand_log("Mismatch: %u-th ge data: %lu != %lu (type %u)\n", r->geq.h, ge_data, data, get_ge_name(ge_type, ge_name));
+		#if 0
 		else
 			derand_log("%u-th ge: %s (%lu)\n", r->geq.h, get_ge_name(current_ge_type, current_ge_name), data);
+		#endif
 		r->geq.h++;
 	}else 
 		derand_log("Mismatch: more ge than recorded. %u-th ge: %s (%lu)\n", r->geq.h, get_ge_name(current_ge_type, current_ge_name), data);
@@ -365,8 +419,13 @@ static inline void new_event(struct sock *sk, u32 type){
 	//check_geq(sk, 0, type);
 	#endif
 
-	r->evtq.h++;
+	// NOTE: seq++ has to be before h++
+	// because if h++ first, then for a very short time period (after h++ and before seq++),
+	// seq < evtq.v[evtq.h].seq. This would allow a packet MISTAKENLY entering lock.
+	// On the other hand, seq++ first would not have such problem, because the short time perior is seq > evtq.v[evtq.h].seq, which does not allow any thing to happen
 	r->seq++;
+	wmb();
+	r->evtq.h++;
 }
 
 static void sockcall_lock(struct sock *sk, u32 sc_id){
@@ -532,7 +591,7 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 	{
 		struct iphdr *iph = ip_hdr(skb);
 		struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
-		derand_log("Received pkt: ipid: %hu seq: %hu ack: %hu\n", ntohs(iph->id), ntohl(tcph->seq), ntohl(tcph->ack_seq));
+		derand_log("Received pkt: ipid: %hu seq: %u ack: %u\n", ntohs(iph->id), ntohl(tcph->seq), ntohl(tcph->ack_seq));
 	}
 	// TODO: check if we should drop or mark CE bit
 

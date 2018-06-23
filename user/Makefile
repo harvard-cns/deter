@@ -19,14 +19,14 @@ replayer.o: replayer.cpp replayer.hpp
 	g++ replayer.cpp -c -o replayer.o -O3 -std=gnu++11
 
 logger: logger.cpp mem_share.o
-	g++ logger.cpp mem_share.o -o logger -O3 -std=gnu++11
+	g++ logger.cpp mem_share.o -o logger -O3 -std=gnu++11 -pthread
 
 clean_records:
 	sudo rm *:*'->'*:*
 
 clean:
-	rm recorder
-	rm replay
-	rm reader
-	rm logger
+	rm recorder || true
+	rm replay || true
+	rm reader || true
+	rm logger || true
 	rm *.o
