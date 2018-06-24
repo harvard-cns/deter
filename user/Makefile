@@ -1,4 +1,4 @@
-all: recorder reader replay
+all: recorder reader replay logger
 
 recorder : recorder.cpp mem_share.o records.o derand_recorder.hpp ../shared_data_struct/derand_recorder.h
 	g++ recorder.cpp mem_share.o records.o -o recorder -O3 -std=gnu++11

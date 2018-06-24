@@ -161,7 +161,7 @@ int Replayer::start_replay_server(){
 	start_replay();
 }
 
-void sockcall_thread(int sockfd, derand_rec_sockcall sc, int id){
+void do_sockcall(int sockfd, derand_rec_sockcall sc, int id){
 	if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG){
 		vector<uint8_t> buf(sc.sendmsg.size);
 		send(sockfd, &buf[0], sc.sendmsg.size, sc.sendmsg.flags);
@@ -172,9 +172,25 @@ void sockcall_thread(int sockfd, derand_rec_sockcall sc, int id){
 	printf("sockcall %d finishes\n", id);
 }
 
+void Replayer::sockcall_thread(u64 id){
+	volatile uint32_t &seq = d->seq;
+	volatile uint32_t &h = d->evtq.h;
+	for (int i = 0; i < rec.sockcalls.size(); i++){
+		if (rec.sockcalls[i].thread_id != id)
+			continue;
+		if (h >= d->evtq.t)
+			printf("Error: more sockcall than recorded\n");
+
+		// wait until next event this sockcall lock
+		while (!(seq == d->evtq.v[get_event_q_idx(h)].seq && get_sockcall_idx(d->evtq.v[get_event_q_idx(h)].type) == i));
+
+		// do the sockcall
+		do_sockcall(sockfd, rec.sockcalls[i], i);
+	}
+}
+
 volatile int finished = 0;
 void monitor_thread(derand_replayer *d){
-	printf("%lx\n", (u64)d);
 	while (!finished){
 		printf("%u %u\n", d->seq, d->evtq.v[get_event_q_idx(d->evtq.h)].seq);
 		sleep(1);
@@ -182,10 +198,20 @@ void monitor_thread(derand_replayer *d){
 }
 
 void Replayer::start_replay(){
-	thread th(monitor_thread, d);
+	thread monitor(monitor_thread, d);
 	vector<thread> thread_pool;
 	volatile uint32_t &seq = d->seq;
 	volatile uint32_t &h = d->evtq.h;
+	// create required number of threads
+	int n_thread = 0;
+	for (int i = 0; i < rec.sockcalls.size(); i++)
+		if (rec.sockcalls[i].thread_id > n_thread)
+			n_thread = rec.sockcalls[i].thread_id;
+	n_thread++; // thread_id are numberred from 0
+	for (int i = 0; i < n_thread; i++)
+		thread_pool.push_back(thread(&Replayer::sockcall_thread, this, (u64)i));
+
+	#if 0
 	for (int i = 0; i < rec.sockcalls.size(); i++){
 		// wait for this socket call to be issued
 		if (h >= d->evtq.t)
@@ -197,6 +223,7 @@ void Replayer::start_replay(){
 		// issue the socket call
 		thread_pool.push_back(thread(sockcall_thread, sockfd, rec.sockcalls[i], i));
 	}
+	#endif
 
 	// wait for all sockcall to finish
 	for (int i = 0; i < thread_pool.size(); i++)

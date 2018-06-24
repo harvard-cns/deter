@@ -385,8 +385,8 @@ static inline void check_geq(const struct sock *sk, u32 current_ge_type, u64 dat
 		if (ge_type != current_ge_type)
 			derand_log("Mismatch: %u-th ge type: %s (%lu) != %s (%lu)\n", r->geq.h, get_ge_name(ge_type, ge_name), ge_data, get_ge_name(current_ge_type, current_ge_name), data);
 		else if (ge_data != data)
-			derand_log("Mismatch: %u-th ge data: %lu != %lu (type %u)\n", r->geq.h, ge_data, data, get_ge_name(ge_type, ge_name));
-		#if 0
+			derand_log("Mismatch: %u-th ge data: %lu != %lu (type %s)\n", r->geq.h, ge_data, data, get_ge_name(ge_type, ge_name));
+		#if 1
 		else
 			derand_log("%u-th ge: %s (%lu)\n", r->geq.h, get_ge_name(current_ge_type, current_ge_name), data);
 		#endif

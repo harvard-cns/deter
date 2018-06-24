@@ -52,7 +52,7 @@ struct effect_bool_q{
 #define get_eb_q_idx(i) ((i) & (EFFECT_BOOL_Q_LEN - 1))
 
 #if DERAND_DEBUG
-#define GENERAL_EVENT_Q_LEN 131072
+#define GENERAL_EVENT_Q_LEN 65536
 struct GeneralEventQ{
 	u32 h, t;
 	struct GeneralEvent v[GENERAL_EVENT_Q_LEN];

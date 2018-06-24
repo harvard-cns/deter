@@ -141,6 +141,7 @@ static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	rec_sc->type = DERAND_SOCKCALL_TYPE_SENDMSG;
 	rec_sc->sendmsg.flags = msg->msg_flags;
 	rec_sc->sendmsg.size = size;
+	rec_sc->thread_id = (u64)current;
 	// return sockcall ID 
 	return sc_id;
 }
@@ -171,6 +172,7 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 	rec_sc->type = DERAND_SOCKCALL_TYPE_RECVMSG;
 	rec_sc->recvmsg.flags = nonblock & msg->msg_flags;
 	rec_sc->recvmsg.size = len;
+	rec_sc->thread_id = (u64)current;
 	// return sockcall ID 
 	return sc_id;
 }

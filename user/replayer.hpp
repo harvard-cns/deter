@@ -28,6 +28,7 @@ public:
 	/* start the server side replay */
 	int start_replay_server();
 	void start_replay();
+	void sockcall_thread(u64 id);
 };
 
 #endif /* _USER__REPLAYER_HPP */

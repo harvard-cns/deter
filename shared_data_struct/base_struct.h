@@ -27,6 +27,7 @@ struct derand_rec_sockcall{
 		struct derand_rec_sockcall_tcp_sendmsg sendmsg;
 		struct derand_rec_sockcall_tcp_recvmsg recvmsg;
 	};
+	u64 thread_id;
 };
 static inline const char* get_sockcall_str(struct derand_rec_sockcall *sc, char* buf){
 	switch (sc->type){

@@ -1,4 +1,5 @@
 #include <cstring>
+#include <unordered_map>
 #include "records.hpp"
 
 using namespace std;
@@ -27,6 +28,17 @@ int read_vector(vector<T> &v, FILE *fin){
 }
 
 void Records::transform(){
+	// transform sockcalls
+	unordered_map<u64, u64> ids;
+	for (uint32_t i = 0; i < sockcalls.size(); i++){
+		u64 key = sockcalls[i].thread_id;
+		if (ids.find(key) == ids.end()){ // a new thread
+			sockcalls[i].thread_id = ids.size();
+			ids[key] = sockcalls[i].thread_id;
+		}else { // a existing thread
+			sockcalls[i].thread_id = ids[key];
+		}
+	}
 	// transform mpq
 	mpq.transform_to_idx_one();
 }
@@ -162,9 +174,9 @@ void Records::print(FILE* fout){
 	for (int i = 0; i < sockcalls.size(); i++){
 		derand_rec_sockcall &sc = sockcalls[i];
 		if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG){
-			fprintf(fout, "sendmsg: 0x%x %lu\n", sc.sendmsg.flags, sc.sendmsg.size);
+			fprintf(fout, "sendmsg: 0x%x %lu thread %lu\n", sc.sendmsg.flags, sc.sendmsg.size, sc.thread_id);
 		}else 
-			fprintf(fout, "recvmsg: 0x%x %lu\n", sc.recvmsg.flags, sc.recvmsg.size);
+			fprintf(fout, "recvmsg: 0x%x %lu thread %lu\n", sc.recvmsg.flags, sc.recvmsg.size, sc.thread_id);
 	}
 	fprintf(fout, "%lu events\n", evts.size());
 	for (int i = 0; i < evts.size(); i++){
