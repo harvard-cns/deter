@@ -128,7 +128,7 @@ int replay_kthread(void *args){
 					derand_log("[kthread] long wait for pkt: irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", irqs_disabled(), in_interrupt(), local_softirq_pending());
 				#endif
 			}
-			derand_log("[kthread] sent a packet, %d remains\n", n_pkt_btw);
+			derand_log("[kthread] sent a packet, %d remains\n", n_pkt_btw - 1);
 		}
 
 		preempt_disable();
@@ -245,7 +245,6 @@ static void recorder_destruct(struct sock *sk){
 	if (!r)
 		return;
 	derand_log("recorder_destruct: h:%u t:%u\n", r->evtq.h, r->evtq.t);
-	r->evtq.h++;
 	if (replay_ops.state == STARTED)
 		replay_ops.state = SHOULD_STOP;
 }
@@ -404,7 +403,7 @@ static inline void check_geq(const struct sock *sk, u32 current_ge_type, u64 dat
 			derand_log("Mismatch: %u-th ge type: %s (%lu) != %s (%lu)\n", r->geq.h, get_ge_name(ge_type, ge_name), ge_data, get_ge_name(current_ge_type, current_ge_name), data);
 		else if (ge_data != data)
 			derand_log("Mismatch: %u-th ge data: %lu != %lu (type %s)\n", r->geq.h, ge_data, data, get_ge_name(ge_type, ge_name));
-		#if 1
+		#if 0
 		else
 			derand_log("%u-th ge: %s (%lu)\n", r->geq.h, get_ge_name(current_ge_type, current_ge_name), data);
 		#endif
@@ -427,10 +426,12 @@ static inline void new_event(struct sock *sk, u32 type){
 
 	#if DERAND_DEBUG
 	// check dbg_data
-	if (r->evtq.h < r->evtq.t){
-		u32 ori = r->evtq.v[get_event_q_idx(r->evtq.h)].dbg_data, rep = tcp_sk(sk)->write_seq;
-		if (ori != rep)
-			derand_log("Mismatch: write_seq %u != %u\n");
+	if (type >= DERAND_SOCK_ID_BASE){
+		if (r->evtq.h < r->evtq.t){
+			u32 ori = r->evtq.v[get_event_q_idx(r->evtq.h)].dbg_data, rep = tcp_sk(sk)->write_seq;
+			if (ori != rep)
+				derand_log("Mismatch: write_seq %u != %u\n", ori, rep);
+		}
 	}
 
 	// check general event sequence
@@ -619,7 +620,7 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 
 	// if fin has appeared before, skip. ipid may not be consecutive after fin
 	if (rep->pkt_idx.fin)
-		return NF_ACCEPT;
+		goto enqueue;
 	// record fin
 	if (tcph->fin)
 		rep->pkt_idx.fin = 1;
@@ -657,6 +658,8 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 
 	if (drop)
 		return NF_DROP;
+
+enqueue:
 	// enqueue this packet
 	enqueue(&pkt_q, skb, state);
 	return NF_STOLEN;

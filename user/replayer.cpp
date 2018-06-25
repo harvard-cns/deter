@@ -254,7 +254,7 @@ void Replayer::start_replay(){
 		thread_pool[i].join();
 	finished = 1;
 	printf("wait to finish\n");
-	while (h < d->evtq.t);
+	while (seq < d->evtq.v[get_event_q_idx(d->evtq.t)].seq);
 	printf("finish!\n");
 	close(sockfd);
 }
