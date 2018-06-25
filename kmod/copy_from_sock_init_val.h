@@ -15,6 +15,8 @@ static inline void copy_from_server_sock(struct sock *sk){
 	d->copied_seq = tp->copied_seq;
 	d->rcv_wup = tp->rcv_wup;
  	d->snd_nxt = tp->snd_nxt;
+	d->segs_out = tp->segs_out;
+	d->bytes_acked = tp->bytes_acked;
  	d->snd_una = tp->snd_una;
  	d->snd_sml = tp->snd_sml;
 	d->rcv_tstamp = tp->rcv_tstamp;
@@ -24,6 +26,7 @@ static inline void copy_from_server_sock(struct sock *sk){
 	d->max_window = tp->max_window;
 	d->window_clamp = tp->window_clamp;
 	d->rcv_ssthresh = tp->rcv_ssthresh;
+	memcpy(&d->rack, &tp->rack, sizeof(d->rack));
 	d->advmss = tp->advmss;
 	d->srtt_us = tp->srtt_us;
 	d->mdev_us = tp->mdev_us;
@@ -34,22 +37,42 @@ static inline void copy_from_server_sock(struct sock *sk){
 	d->ecn_flags = tp->ecn_flags;
 	d->snd_up = tp->snd_up;
 	memcpy(&d->rx_opt, &tp->rx_opt, sizeof(d->rx_opt));
+	d->snd_cwnd = tp->snd_cwnd;
 	d->snd_cwnd_stamp = tp->snd_cwnd_stamp;
  	d->rcv_wnd = tp->rcv_wnd;
 	d->write_seq = tp->write_seq;
 	d->pushed_seq = tp->pushed_seq;
+	d->undo_retrans = tp->undo_retrans;
 	d->total_retrans = tp->total_retrans;
-	memcpy(&d->rcvq_space, &tp->rcvq_space, sizeof(d->rcvq_space));
 	memcpy(&d->rcv_rtt_est, &tp->rcv_rtt_est, sizeof(d->rcv_rtt_est));
+	memcpy(&d->rcvq_space, &tp->rcvq_space, sizeof(d->rcvq_space));
 
+	d->icsk_timeout = icsk->icsk_timeout;
 	d->icsk_rto = icsk->icsk_rto;
 	memcpy(&d->icsk_ack, &icsk->icsk_ack, sizeof(d->icsk_ack));
 	memcpy(&d->icsk_mtup, &icsk->icsk_mtup, sizeof(d->icsk_mtup));
 	
+	d->skc_reuse = sk->sk_reuse;
+	d->skc_reuseport = sk->sk_reuseport;
+	d->skc_flags = sk->sk_flags;
+	d->sk_forward_alloc = sk->sk_forward_alloc;
+	d->sk_ll_usec = sk->sk_ll_usec;
 	d->sk_rcvbuf = sk->sk_rcvbuf;
 	d->sk_sndbuf = sk->sk_sndbuf;
+	d->sk_no_check_tx = sk->sk_no_check_tx;
 	d->sk_userlocks = sk->sk_userlocks;
 	d->sk_pacing_rate = sk->sk_pacing_rate;
+	d->sk_max_pacing_rate = sk->sk_max_pacing_rate;
+	d->sk_route_caps = sk->sk_route_caps;
+	d->sk_route_nocaps = sk->sk_route_nocaps;
+	d->sk_rcvlowat = sk->sk_rcvlowat;
+	d->sk_lingertime = sk->sk_lingertime;
+	d->sk_priority = sk->sk_priority;
+	d->sk_rcvtimeo = sk->sk_rcvtimeo;
+	d->sk_sndtimeo = sk->sk_sndtimeo;
+	d->sk_tsflags = sk->sk_tsflags;
+	d->sk_tskey = sk->sk_tskey;
+	d->sk_mark = sk->sk_mark;
 
 	/* print */
 	#if 0
@@ -312,6 +335,10 @@ static inline void copy_from_server_sock(struct sock *sk){
 	printk("tp->mtu_info=%u\n", tp->mtu_info); 
 	printk("tp->save_syn=%llu\n", (u64)tp->saved_syn);
 	#endif
+}
+
+static inline void copy_from_client_sock(struct sock *sk){
+	copy_from_server_sock(sk);
 }
 
 #endif /* _KMOD__COPY_FROM_SOCK_INIT_VAL_H */

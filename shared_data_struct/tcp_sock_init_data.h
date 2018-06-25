@@ -11,6 +11,13 @@ struct tcp_sock_init_data{
 	u32	copied_seq;	/* Head of yet unread data		*/
 	u32	rcv_wup;	/* rcv_nxt on last window update sent	*/
  	u32	snd_nxt;	/* Next sequence we send		*/
+	u32	segs_out;	/* RFC4898 tcpEStatsPerfSegsOut
+				 * The total number of segments sent.
+				 */
+	u64	bytes_acked;	/* RFC4898 tcpEStatsAppHCThruOctetsAcked
+				 * sum(delta(snd_una)), or how many bytes
+				 * were acked.
+				 */
  	u32	snd_una;	/* First byte we want an ack for	*/
  	u32	snd_sml;	/* Last byte of the most recently transmitted small packet */
 	u32	rcv_tstamp;	/* timestamp of last received ACK (for keepalives) */
@@ -20,6 +27,11 @@ struct tcp_sock_init_data{
 	u32	max_window;	/* Maximal window ever seen from peer	*/
 	u32	window_clamp;	/* Maximal window to advertise		*/
 	u32	rcv_ssthresh;	/* Current window clamp			*/
+	struct {
+		struct skb_mstamp mstamp; /* (Re)sent time of the skb */
+		u8 advanced; /* mstamp advanced since last lost marking */
+		u8 reord;    /* reordering detected */
+	} rack;
 	u16	advmss;		/* Advertised MSS			*/
 /* RTT measurement */
 	u32	srtt_us;	/* smoothed round trip time << 3 in usecs */
@@ -49,10 +61,12 @@ struct tcp_sock_init_data{
 		u16	user_mss;	/* mss requested by user in ioctl	*/
 		u16	mss_clamp;	/* Maximal mss, negotiated at connection setup */
 	} rx_opt;
+ 	u32	snd_cwnd;	/* Sending congestion window		*/
 	u32	snd_cwnd_stamp;
  	u32	rcv_wnd;	/* Current receiver window		*/
 	u32	write_seq;	/* Tail(+1) of data held in tcp send buffer */
 	u32	pushed_seq;	/* Last pushed seq, required to talk to windows */
+	int	undo_retrans;	/* number of undoable retransmissions. */
 	u32	total_retrans;	/* Total retransmits for entire connection */
 /* Receiver side RTT estimation */
 	struct {
@@ -68,6 +82,7 @@ struct tcp_sock_init_data{
 		u32	time;
 	} rcvq_space;
 
+	unsigned long		  icsk_timeout;
 	u32			  icsk_rto;
 	struct {
 		__u8		  pending;	 /* ACK is pending			   */
@@ -90,10 +105,27 @@ struct tcp_sock_init_data{
 		u32		  probe_timestamp;
 	} icsk_mtup;
 
+	unsigned char		skc_reuse:4;
+	unsigned char		skc_reuseport:1;
+	unsigned long skc_flags; // cannot name sk_flags because sk_flags is defined as a MACRO in sock.h
+	int			sk_forward_alloc;
+	unsigned int		sk_ll_usec;
 	int			sk_rcvbuf;
 	int			sk_sndbuf;
-	unsigned int  sk_userlocks : 4;
+	unsigned int  sk_no_check_tx : 1,
+				sk_userlocks : 4;
 	u32			sk_pacing_rate; /* bytes per second */
+	u32			sk_max_pacing_rate;
+	u64 sk_route_caps;
+	u64 sk_route_nocaps;
+	int			sk_rcvlowat;
+	unsigned long	        sk_lingertime;
+	__u32			sk_priority;
+	long			sk_rcvtimeo;
+	long			sk_sndtimeo;
+	u16			sk_tsflags;
+	u32			sk_tskey;
+	__u32			sk_mark;
 };
 
 #endif /* _SHARED_DATA_STRUCT__TCP_SOCK_INIT_DATA_H */

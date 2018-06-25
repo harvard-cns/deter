@@ -266,6 +266,8 @@ void Records::print_init_data(FILE* fout){
 	fprintf(fout, "copied_seq = %u\n", d->copied_seq);
 	fprintf(fout, "rcv_wup = %u\n", d->rcv_wup);
 	fprintf(fout, "snd_nxt = %u\n", d->snd_nxt);
+	fprintf(fout, "segs_out = %u\n", d->segs_out);
+	fprintf(fout, "bytes_acked = %lu\n", d->bytes_acked);
 	fprintf(fout, "snd_una = %u\n", d->snd_una);
 	fprintf(fout, "snd_sml = %u\n", d->snd_sml);
 	fprintf(fout, "rcv_tstamp = %u\n", d->rcv_tstamp);
@@ -275,6 +277,9 @@ void Records::print_init_data(FILE* fout){
 	fprintf(fout, "max_window = %u\n", d->max_window);
 	fprintf(fout, "window_clamp = %u\n", d->window_clamp);
 	fprintf(fout, "rcv_ssthresh = %u\n", d->rcv_ssthresh);
+	fprintf(fout, "rack.mstamp={%u, %u}\n", d->rack.mstamp.stamp_us, d->rack.mstamp.stamp_jiffies);
+	fprintf(fout, "rack.advanced=%hhu\n", d->rack.advanced); 
+	fprintf(fout, "rack.reord=%hhu\n", d->rack.reord);    
 	fprintf(fout, "advmss = %u\n", d->advmss);
 	fprintf(fout, "srtt_us = %u\n", d->srtt_us);
 	fprintf(fout, "mdev_us = %u\n", d->mdev_us);
@@ -300,13 +305,16 @@ void Records::print_init_data(FILE* fout){
 	fprintf(fout, "rx_opt.num_sacks = %hhu\n", d->rx_opt.num_sacks);
 	fprintf(fout, "rx_opt.user_mss = %hhu\n", d->rx_opt.user_mss);
 	fprintf(fout, "rx_opt.mss_clamp = %u\n", d->rx_opt.mss_clamp);
+	fprintf(fout, "snd_cwnd = %u\n", d->snd_cwnd);
 	fprintf(fout, "snd_cwnd_stamp = %u\n", d->snd_cwnd_stamp);
 	fprintf(fout, "rcv_wnd = %u\n", d->rcv_wnd);
 	fprintf(fout, "write_seq = %u\n", d->write_seq);
 	fprintf(fout, "pushed_seq = %u\n", d->pushed_seq);
+	fprintf(fout, "undo_retrans = %d\n", d->undo_retrans);
 	fprintf(fout, "total_retrans = %u\n", d->total_retrans);
 	fprintf(fout, "rcv_rtt_est = {%u, %u, %u}\n", d->rcv_rtt_est.rtt, d->rcv_rtt_est.seq, d->rcv_rtt_est.time);
 	fprintf(fout, "rcvq_space = {%d, %u, %u}\n", d->rcvq_space.space, d->rcvq_space.seq, d->rcvq_space.time);
+	fprintf(fout, "icsk_timeout = %lu\n", d->icsk_timeout);
 	fprintf(fout, "icsk_rto = %u\n", d->icsk_rto);
 	fprintf(fout, "icsk_ack.lrcvtime = %u\n", d->icsk_ack.lrcvtime);
 	fprintf(fout, "icsk_ack.last_seg_size = %u\n", d->icsk_ack.last_seg_size);
@@ -324,10 +332,27 @@ void Records::print_init_data(FILE* fout){
 	fprintf(fout, "icsk_mtup.search_low = %d\n", d->icsk_mtup.search_low);
 	fprintf(fout, "icsk_mtup.probe_size = %d\n", d->icsk_mtup.probe_size);
 	fprintf(fout, "icsk_mtup.probe_timestamp = %u\n", d->icsk_mtup.probe_timestamp);
+	fprintf(fout, "skc_reuse = %hhu\n", d->skc_reuse);
+	fprintf(fout, "skc_reuseport = %hhu\n", d->skc_reuseport);
+	fprintf(fout, "skc_flags = %lu\n", d->skc_flags);
+	fprintf(fout, "sk_forward_alloc = %d\n", d->sk_forward_alloc);
+	fprintf(fout, "sk_ll_usec = %u\n", d->sk_ll_usec);
 	fprintf(fout, "sk_rcvbuf = %d\n", d->sk_rcvbuf);
 	fprintf(fout, "sk_sndbuf = %d\n", d->sk_sndbuf);
+	fprintf(fout, "sk_no_check_tx = %u\n", d->sk_no_check_tx);
 	fprintf(fout, "sk_userlocks = %u\n", d->sk_userlocks);
 	fprintf(fout, "sk_pacing_rate = %u\n", d->sk_pacing_rate);
+	fprintf(fout, "sk_max_pacing_rate = %u\n", d->sk_max_pacing_rate);
+	fprintf(fout, "sk_route_caps = %lu\n", d->sk_route_caps);
+	fprintf(fout, "sk_route_nocaps = %lu\n", d->sk_route_nocaps);
+	fprintf(fout, "sk_rcvlowat = %d\n", d->sk_rcvlowat);
+	fprintf(fout, "sk_lingertime = %lu\n", d->sk_lingertime);
+	fprintf(fout, "sk_priority = %u\n", d->sk_priority);
+	fprintf(fout, "sk_rcvtimeo = %ld\n", d->sk_rcvtimeo);
+	fprintf(fout, "sk_sndtimeo = %ld\n", d->sk_sndtimeo);
+	fprintf(fout, "sk_tsflags = %hu\n", d->sk_tsflags);
+	fprintf(fout, "sk_tskey = %u\n", d->sk_tskey);
+	fprintf(fout, "sk_mark = %u\n", d->sk_mark);
 }
 
 void Records::clear(){

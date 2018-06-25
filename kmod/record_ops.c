@@ -66,6 +66,8 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int server_sid
 	#endif
 	if (server_side)
 		copy_from_server_sock(sk); // copy sock init data
+	else 
+		copy_from_client_sock(sk);
 	rec->recorder_id++;
 out:
 	return;
