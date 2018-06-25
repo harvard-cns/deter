@@ -21,10 +21,24 @@ int Replayer::convert_event(){
 	}
 	d->evtq.h = 0;
 	d->evtq.t = size;
-	memcpy(d->evtq.v, &s[0], sizeof(derand_event) * size);
+	if (size > 0)
+		memcpy(d->evtq.v, &s[0], sizeof(derand_event) * size);
 	return 0;
 }
 
+int Replayer::convert_drop(){
+	auto &s = rec.dpq;
+	u64 size = s.size();
+	if (size > DROP_Q_LEN){
+		fprintf(stderr, "too many drops: %lu > %u\n", size, DROP_Q_LEN);
+		return -1;
+	}
+	d->dpq.h = 0;
+	d->dpq.t = size;
+	if (size > 0)
+		memcpy(d->dpq.v, &s[0], sizeof(uint32_t) * size);
+	return 0;
+}
 int Replayer::convert_jiffies(){
 	auto &s = rec.jiffies;
 	u64 size = s.size();
@@ -34,7 +48,8 @@ int Replayer::convert_jiffies(){
 	}
 	d->jfq.h = 0;
 	d->jfq.t = size;
-	memcpy(d->jfq.v, &s[0], sizeof(jiffies_rec) * size);
+	if (size > 0)
+		memcpy(d->jfq.v, &s[0], sizeof(jiffies_rec) * size);
 	return 0;
 }
 
@@ -47,7 +62,8 @@ int Replayer::convert_memory_pressure(){
 	}
 	d->mpq.h = 0;
 	d->mpq.t = size;
-	memcpy(d->mpq.v, &s[0], sizeof(uint32_t) * size);
+	if (size > 0)
+		memcpy(d->mpq.v, &s[0], sizeof(uint32_t) * size);
 
 	return 0;
 }
@@ -60,7 +76,8 @@ int Replayer::convert_memory_allocated(){
 	}
 	d->maq.h = 0;
 	d->maq.t = s.size();
-	memcpy(d->maq.v, &s[0], sizeof(memory_allocated_rec) * s.size());
+	if (s.size() > 0)
+		memcpy(d->maq.v, &s[0], sizeof(memory_allocated_rec) * s.size());
 	return 0;
 }
 
@@ -72,7 +89,8 @@ int Replayer::convert_mstamp(){
 	}
 	d->msq.h = 0;
 	d->msq.t = s.size();
-	memcpy(d->msq.v, &s[0], sizeof(skb_mstamp) * s.size());
+	if (s.size() > 0)
+		memcpy(d->msq.v, &s[0], sizeof(skb_mstamp) * s.size());
 	return 0;
 }
 
@@ -85,7 +103,8 @@ int Replayer::convert_effect_bool(){
 		}
 		d->ebq[i].h = 0;
 		d->ebq[i].t = s.n;
-		memcpy(d->ebq[i].v, &s.v[0], sizeof(uint32_t) * s.v.size());
+		if (s.v.size() > 0)
+			memcpy(d->ebq[i].v, &s.v[0], sizeof(uint32_t) * s.v.size());
 	}
 	return 0;
 }
@@ -99,7 +118,8 @@ int Replayer::convert_general_event(){
 	}
 	d->geq.h = 0;
 	d->geq.t = s.size();
-	memcpy(d->geq.v, &s[0], sizeof(GeneralEvent) * s.size());
+	if (s.size() > 0)
+		memcpy(d->geq.v, &s[0], sizeof(GeneralEvent) * s.size());
 	return 0;
 }
 #endif /* DERAND_DEBUG */
@@ -120,19 +140,21 @@ int Replayer::read_records(const string &record_file_name){
 	
 	if (convert_event())
 		return -2;
-	if (convert_jiffies())
+	if (convert_drop())
 		return -3;
-	if (convert_memory_pressure())
+	if (convert_jiffies())
 		return -4;
-	if (convert_memory_allocated())
+	if (convert_memory_pressure())
 		return -5;
-	if (convert_mstamp())
+	if (convert_memory_allocated())
 		return -6;
-	if (convert_effect_bool())
+	if (convert_mstamp())
 		return -7;
+	if (convert_effect_bool())
+		return -8;
 	#if DERAND_DEBUG
 	if (convert_general_event())
-		return -8;
+		return -9;
 	#endif
 	return 0;
 }

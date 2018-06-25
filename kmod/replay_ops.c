@@ -189,8 +189,9 @@ static void set_null_timer(struct sock *sk){
 /*********************************************
  * hooks for replayer create/destruct
  ********************************************/
-static void server_recorder_create(struct sock *sk){
+void server_recorder_create(struct sock *sk, struct sk_buff *skb){
 	uint16_t sport;
+	struct derand_replayer *rep;
 
 	if (!replay_ops.replayer)
 		return;
@@ -210,8 +211,13 @@ static void server_recorder_create(struct sock *sk){
 	}
 
 	// now, this is the socket to replay
-	sk->replayer = replay_ops.replayer;
+	rep = sk->replayer = replay_ops.replayer;
 	
+	// init PktIdx
+	rep->pkt_idx.init_ipid = rep->pkt_idx.last_ipid = ntohs(ip_hdr(skb)->id);
+	rep->pkt_idx.idx = 0;
+	rep->pkt_idx.fin = 0;
+
 	// record 4 tuples
 	replay_ops.dport = inet_sk(sk)->inet_dport;
 	replay_ops.sip = inet_sk(sk)->inet_saddr;
@@ -584,17 +590,61 @@ static inline bool should_replay_skb(struct sk_buff *skb){
 }
 
 static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const struct nf_hook_state *state){
+	struct derand_replayer *rep;
+	u32 idx, last_idx, i;
+	bool drop = false;
+	struct iphdr *iph = ip_hdr(skb);
+	struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
+
 	// if this packet should not be replayed, skip
 	if (!should_replay_skb(skb))
 		return NF_ACCEPT;
 
+	rep = replay_ops.replayer;
 	{
-		struct iphdr *iph = ip_hdr(skb);
-		struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
 		derand_log("Received pkt: ipid: %hu seq: %u ack: %u\n", ntohs(iph->id), ntohl(tcph->seq), ntohl(tcph->ack_seq));
 	}
-	// TODO: check if we should drop or mark CE bit
 
+	// if fin has appeared before, skip. ipid may not be consecutive after fin
+	if (rep->pkt_idx.fin)
+		return NF_ACCEPT;
+	// record fin
+	if (tcph->fin)
+		rep->pkt_idx.fin = 1;
+
+	// update and get pkt idx
+	last_idx = rep->pkt_idx.idx;
+	idx = update_pkt_idx(&rep->pkt_idx, ntohs(iph->id));
+
+	// TODO: check if we should mark CE bit
+
+	// for i in [last_idx+1, idx], check wrong drop
+	// for i == idx, check if we should drop
+	for (i = last_idx + 1; i <= idx; i++){
+		drop = false;
+
+		// decide if i should drop or not, and set h to the next drop
+		while (rep->dpq.h < rep->dpq.t){
+			u32 drop_idx = rep->dpq.v[get_drop_q_idx(rep->dpq.h)];
+			if (drop_idx < i){
+				rep->dpq.h++;
+			}else if (drop_idx == i){ // should drop
+				rep->dpq.h++;
+				drop = true;
+				break;
+			}else{ // should not drop
+				drop = false;
+				break;
+			}
+		}
+
+		// if i should not drop, but mistakenly dropped, error
+		if (!drop && i < idx)
+			derand_log("Error: pkt wrong drop: idx %u\n", i);
+	}
+
+	if (drop)
+		return NF_DROP;
 	// enqueue this packet
 	enqueue(&pkt_q, skb, state);
 	return NF_STOLEN;

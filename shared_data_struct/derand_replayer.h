@@ -11,6 +11,13 @@ struct event_q{
 };
 #define get_event_q_idx(i) ((i) & (EVENT_Q_LEN - 1))
 
+#define DROP_Q_LEN 1024
+struct DropQ{
+	u32 h, t;
+	u32 v[DROP_Q_LEN];
+};
+#define get_drop_q_idx(i) ((i) & (DROP_Q_LEN - 1))
+
 #define JIFFIES_Q_LEN 8192
 struct jiffies_q{
 	unsigned long last_jiffies; // the last jiffies value
@@ -65,6 +72,8 @@ struct derand_replayer{
 	u32 seq;
 	atomic_t sockcall_id; // current socket call ID
 	struct event_q evtq;
+	struct PktIdx pkt_idx;
+	struct DropQ dpq;
 	struct jiffies_q jfq;
 	struct memory_pressure_q mpq;
 	struct memory_allocated_q maq;

@@ -73,6 +73,10 @@ int Records::dump(const char* filename){
 	if (!dump_vector(sockcalls, fout))
 		goto fail_write;
 
+	// write drop
+	if (!dump_vector(dpq, fout))
+		goto fail_write;
+
 	// write jiffies_reads
 	if (!dump_vector(jiffies, fout))
 		goto fail_write;
@@ -128,6 +132,10 @@ int Records::read(const char* filename){
 
 	// read sockcalls
 	if (!read_vector(sockcalls, fin))
+		goto fail_read;
+
+	// read drop
+	if (!read_vector(dpq, fin))
 		goto fail_read;
 
 	// read jiffies_reads
@@ -191,6 +199,11 @@ void Records::print(FILE* fout){
 		#endif
 		fprintf(fout, "\n");
 	}
+
+	fprintf(fout, "%lu drops\n", dpq.size());
+	for (uint32_t i = 0; i < dpq.size(); i++)
+		fprintf(fout, "%u\n", dpq[i]);
+
 	fprintf(fout, "%lu new jiffies\n", jiffies.size());
 	if (jiffies.size() > 0){
 		fprintf(fout, "first: %lu\n", jiffies[0].init_jiffies);

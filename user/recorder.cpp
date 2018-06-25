@@ -75,6 +75,10 @@ int main()
 				for (j = rec->sc_h; j < rec->sockcall_id.counter; j++)
 					res[i].sockcalls.push_back(rec->sockcalls[get_sc_q_idx(j)]);
 				rec->sc_h = j;
+				// copy drop
+				for (j = rec->dpq.h; j < rec->dpq.t; j++)
+					res[i].dpq.push_back(rec->dpq.v[get_drop_q_idx(j)]);
+				rec->dpq.h = j;
 				// copy jiffies
 				for (j = rec->jf.h; j < rec->jf.t; j++)
 					res[i].jiffies.push_back(rec->jf.v[get_jiffies_q_idx(j)]);

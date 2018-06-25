@@ -16,6 +16,7 @@ public:
 	void set_addr(void *addr){d = (derand_replayer*)addr;}
 	int read_records(const std::string &record_file_name);
 	int convert_event();
+	int convert_drop();
 	int convert_jiffies();
 	int convert_memory_pressure();
 	int convert_memory_allocated();

@@ -4,6 +4,16 @@
 #include "base_struct.h"
 #include "tcp_sock_init_data.h"
 
+/***********************************
+ * drop
+ **********************************/
+#define DERAND_DROP_PER_SOCK 1024
+struct DropQ{
+	u32 h, t;
+	u32 v[DERAND_DROP_PER_SOCK];
+};
+#define get_drop_q_idx(i) ((i) & (DERAND_DROP_PER_SOCK - 1))
+
 /************************************
  * jiffies
  ***********************************/
@@ -110,6 +120,8 @@ struct derand_recorder{
 	struct derand_event evts[DERAND_EVENT_PER_SOCK]; // sequence of derand_event
 	u32 sc_h, sc_t;
 	struct derand_rec_sockcall sockcalls[DERAND_SOCKCALL_PER_SOCK]; // sockcall
+	struct PktIdx pkt_idx; // maintain pkt idx
+	struct DropQ dpq; // drop
 	struct jiffies_q jf; // jiffies
 	struct memory_pressure_q mpq; // memory pressure
 	struct memory_allocated_q maq; // memory_allocated

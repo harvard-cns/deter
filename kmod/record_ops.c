@@ -25,7 +25,7 @@ out:
  * Called when a connection is successfully built
  * i.e., after receiving SYN-ACK at client and after receiving ACK at server.
  * So this function is called in bottom-half, so we must not block*/
-static void recorder_create(struct sock *sk, int server_side){
+static void recorder_create(struct sock *sk, struct sk_buff *skb, int server_side){
 	int i;
 
 	// create derand_recorder
@@ -43,11 +43,17 @@ static void recorder_create(struct sock *sk, int server_side){
 	rec->sport = inet_sk(sk)->inet_sport;
 	rec->dport = inet_sk(sk)->inet_dport;
 
+	// init PktIdx
+	rec->pkt_idx.init_ipid = rec->pkt_idx.last_ipid = ntohs(ip_hdr(skb)->id);
+	rec->pkt_idx.idx = 0;
+	rec->pkt_idx.fin = 0;
+
 	// init variables
 	rec->seq = 0;
 	atomic_set(&rec->sockcall_id, 0);
 	rec->evt_h = rec->evt_t = 0;
 	rec->sc_h = rec->sc_t = 0;
+	rec->dpq.h = rec->dpq.t = 0;
 	rec->jf.h = rec->jf.t = rec->jf.idx_delta = rec->jf.last_jiffies = 0;
 	rec->mpq.h = rec->mpq.t = 0;
 	rec->maq.h = rec->maq.t = rec->maq.idx_delta = rec->maq.last_v = 0;
@@ -65,19 +71,19 @@ out:
 	return;
 }
 
-static void server_recorder_create(struct sock *sk){
+void server_recorder_create(struct sock *sk, struct sk_buff *skb){
 	uint16_t sport = ntohs(inet_sk(sk)->inet_sport);
 	if ((sport >= 60000 && sport <= 60003) || sport == 50010){
 		printk("server sport = %hu, dport = %hu, creating recorder\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
-		recorder_create(sk, 1);
+		recorder_create(sk, skb, 1);
 	}
 }
-static void client_recorder_create(struct sock *sk){
+void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 	uint16_t dport = ntohs(inet_sk(sk)->inet_dport);
 	if ((dport >= 60000 && dport <= 60003) || dport == 50010){
 	//if (inet_sk(sk)->inet_dport == 0x8913){ // port 5001
 		printk("client sport = %hu, dport = %hu, creating recorder\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
-		recorder_create(sk, 0);
+		recorder_create(sk, skb, 0);
 	}
 }
 
@@ -204,6 +210,35 @@ static void tasklet(struct sock *sk){
 	new_event(sk, EVENT_TYPE_TASKLET);
 }
 
+void mon_net_action(struct sock *sk, struct sk_buff *skb){
+	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
+	u16 ipid, gap;
+	u32 i, idx;
+	struct iphdr *iph = ip_hdr(skb);
+	struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
+	if (!rec)
+		return;
+
+	// if fin has appeared before, skip. ipid may not be consecutive after fin
+	if (rec->pkt_idx.fin)
+		return;
+	// record fin
+	if (tcph->fin)
+		rec->pkt_idx.fin = 1;
+
+	ipid = ntohs(iph->id);
+	gap = get_pkt_idx_gap(&rec->pkt_idx, ipid);
+	idx = rec->pkt_idx.idx;
+
+	// record drops
+	for (i = 1; i < gap; i++){
+		rec->dpq.v[get_drop_q_idx(rec->dpq.t)] = idx + i;
+		wmb();
+		rec->dpq.t++;
+	}
+	update_pkt_idx(&rec->pkt_idx, ipid);
+}
+
 static void read_jiffies(const struct sock *sk, unsigned long v, int id){
 	struct jiffies_q *jf = &((struct derand_recorder*)sk->recorder)->jf;
 	#if DERAND_DEBUG
@@ -302,6 +337,7 @@ int bind_record_ops(void){
 	derand_record_ops.delack_timer = delack_timer;
 	derand_record_ops.keepalive_timer = keepalive_timer;
 	derand_record_ops.tasklet = tasklet;
+	derand_record_ops.mon_net_action = mon_net_action;
 	derand_record_ops.read_jiffies = read_jiffies;
 	derand_record_ops.read_tcp_time_stamp = read_jiffies; // store jiffies and tcp_time_stamp together
 	derand_record_ops.tcp_under_memory_pressure = record_tcp_under_memory_pressure;

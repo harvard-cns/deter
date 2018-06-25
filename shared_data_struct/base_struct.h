@@ -85,6 +85,21 @@ static inline char* get_event_name(u32 type, char* buf){
 	return buf;
 }
 
+/* struct for maintaining pkt idx */
+struct PktIdx{
+	u16 init_ipid, last_ipid; // the ipid of the first packet, the ipid of the last packet
+	u32 idx; // the idx of the last packet
+	u8 fin; // if fin has appeared
+};
+static inline u16 get_pkt_idx_gap(struct PktIdx *pkt_idx, u16 ipid){
+	return (u16)(ipid - pkt_idx->last_ipid);
+}
+static inline u32 update_pkt_idx(struct PktIdx *pkt_idx, u16 ipid){
+	pkt_idx->idx += get_pkt_idx_gap(pkt_idx, ipid);
+	pkt_idx->last_ipid = ipid;
+	return pkt_idx->idx;
+}
+
 /* struct for a jiffies read with new value */
 union jiffies_rec{
 	unsigned long init_jiffies; // if this is the first jiffies read
