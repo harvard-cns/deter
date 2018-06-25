@@ -20,12 +20,18 @@ struct derand_rec_sockcall_tcp_recvmsg{
 	int flags; // nonblock & flags
 	size_t size;
 };
+#define DERAND_SOCKCALL_TYPE_CLOSE 2
+struct derand_rec_sockcall_tcp_close{
+	u8 type;
+	long timeout;
+};
 
 struct derand_rec_sockcall{
 	union{
 		u8 type;
 		struct derand_rec_sockcall_tcp_sendmsg sendmsg;
 		struct derand_rec_sockcall_tcp_recvmsg recvmsg;
+		struct derand_rec_sockcall_tcp_close close;
 	};
 	u64 thread_id;
 };
@@ -36,6 +42,9 @@ static inline const char* get_sockcall_str(struct derand_rec_sockcall *sc, char*
 			break;
 		case DERAND_SOCKCALL_TYPE_RECVMSG:
 			sprintf(buf, "recvmsg");
+			break;
+		case DERAND_SOCKCALL_TYPE_CLOSE:
+			sprintf(buf, "close");
 			break;
 	}
 	return buf;

@@ -71,14 +71,14 @@ out:
 	return;
 }
 
-void server_recorder_create(struct sock *sk, struct sk_buff *skb){
+static void server_recorder_create(struct sock *sk, struct sk_buff *skb){
 	uint16_t sport = ntohs(inet_sk(sk)->inet_sport);
 	if ((sport >= 60000 && sport <= 60003) || sport == 50010){
 		printk("server sport = %hu, dport = %hu, creating recorder\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		recorder_create(sk, skb, 1);
 	}
 }
-void client_recorder_create(struct sock *sk, struct sk_buff *skb){
+static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 	uint16_t dport = ntohs(inet_sk(sk)->inet_dport);
 	if ((dport >= 60000 && dport <= 60003) || dport == 50010){
 	//if (inet_sk(sk)->inet_dport == 0x8913){ // port 5001
@@ -179,7 +179,26 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 	rec_sc->recvmsg.flags = nonblock & msg->msg_flags;
 	rec_sc->recvmsg.size = len;
 	rec_sc->thread_id = (u64)current;
-	// return sockcall ID 
+	// return sockcall ID
+	return sc_id;
+}
+
+static u32 new_close(struct sock *sk, long timeout){
+	struct derand_recorder* rec = sk->recorder;
+	struct derand_rec_sockcall *rec_sc;
+	int sc_id;
+
+	if (!rec)
+		return 0;
+	// get sockcall ID
+	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
+	// get record for storing this sockcall
+	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
+	// store data for this sockcall
+	rec_sc->type = DERAND_SOCKCALL_TYPE_CLOSE;
+	rec_sc->close.timeout = timeout;
+	rec_sc->thread_id = (u64)current;
+	// return sockcall ID
 	return sc_id;
 }
 
@@ -331,6 +350,7 @@ int bind_record_ops(void){
 	derand_record_ops.new_sendmsg = new_sendmsg;
 	//derand_record_ops.new_sendpage = new_sendpage;
 	derand_record_ops.new_recvmsg = new_recvmsg;
+	derand_record_ops.new_close = new_close;
 	derand_record_ops.sockcall_lock = sockcall_lock;
 	derand_record_ops.incoming_pkt = incoming_pkt;
 	derand_record_ops.write_timer = write_timer;

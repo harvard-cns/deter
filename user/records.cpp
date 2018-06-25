@@ -183,8 +183,10 @@ void Records::print(FILE* fout){
 		derand_rec_sockcall &sc = sockcalls[i];
 		if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG){
 			fprintf(fout, "sendmsg: 0x%x %lu thread %lu\n", sc.sendmsg.flags, sc.sendmsg.size, sc.thread_id);
-		}else 
+		}else if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG){
 			fprintf(fout, "recvmsg: 0x%x %lu thread %lu\n", sc.recvmsg.flags, sc.recvmsg.size, sc.thread_id);
+		}else 
+			fprintf(fout, "close: %ld thread %lu\n", sc.close.timeout, sc.thread_id);
 	}
 	fprintf(fout, "%lu events\n", evts.size());
 	for (int i = 0; i < evts.size(); i++){
