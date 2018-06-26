@@ -11,6 +11,7 @@
 #include "record_ctrl.h"
 #include "record_ops.h"
 #include "record_user_share.h"
+#include "logger.h"
 
 u32 dstip;
 module_param(dstip, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
@@ -32,6 +33,9 @@ static int __init record_init(void)
 	// bind record_ops to kernel stack
 	if (bind_record_ops())
 		goto fail_bind_ops;
+
+	// init logger
+	init_logger();
 	return 0;
 	
 fail_bind_ops:
@@ -52,6 +56,9 @@ static void __exit record_exit(void)
 	
 	// remove record_ctrl data
 	delete_record_ctrl();
+
+	// clear logger
+	clear_logger();
 }
 
 MODULE_LICENSE("GPL");

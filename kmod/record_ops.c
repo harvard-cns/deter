@@ -4,6 +4,7 @@
 #include "record_ctrl.h"
 #include "derand_recorder.h"
 #include "copy_from_sock_init_val.h"
+#include "logger.h"
 
 u32 mon_dstip = 0;
 
@@ -123,7 +124,7 @@ static inline void new_event(struct sock *sk, u32 type){
 static void recorder_destruct(struct sock *sk){
 	struct derand_recorder* rec = sk->recorder;
 	if (!rec){
-		printk("[recorder_destruct] sport = %hu, dport = %hu, recorder is NULL.\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
+		//printk("[recorder_destruct] sport = %hu, dport = %hu, recorder is NULL.\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		return;
 	}
 
@@ -299,7 +300,11 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 }
 
 static void read_jiffies(const struct sock *sk, unsigned long v, int id){
-	struct jiffies_q *jf = &((struct derand_recorder*)sk->recorder)->jf;
+	struct derand_recorder* rec = sk->recorder;
+	struct jiffies_q *jf;
+	if (!rec)
+		return;
+	jf = &rec->jf;
 	#if DERAND_DEBUG
 	add_geq(&((struct derand_recorder*)sk->recorder)->geq, 1, id);
 	#endif
