@@ -61,6 +61,10 @@ int Records::dump(const char* filename){
 	if (!fwrite(&mode, sizeof(mode), 1, fout))
 		goto fail_write;
 
+	// write broken 
+	if (!fwrite(&broken, sizeof(broken), 1, fout))
+		goto fail_write;
+
 	// write 4 tuples
 	if (!fwrite(&sip, sizeof(sip)+sizeof(dip)+sizeof(sport)+sizeof(dport), 1, fout))
 		goto fail_write;
@@ -126,6 +130,10 @@ int Records::read(const char* filename){
 	if (!fread(&mode, sizeof(mode), 1, fin))
 		goto fail_read;
 
+	// read broken
+	if (!fread(&broken, sizeof(broken), 1, fin))
+		goto fail_read;
+
 	// read 4 tuples
 	if (!fread(&sip, sizeof(sip)+sizeof(dip)+sizeof(sport)+sizeof(dport), 1, fin))
 		goto fail_read;
@@ -185,6 +193,7 @@ fail_read:
 }
 
 void Records::print(FILE* fout){
+	fprintf(fout, "broken: %x\n", broken);
 	fprintf(fout, "mode: %u\n", mode);
 	fprintf(fout, "%08x:%hu %08x:%hu\n", sip, sport, dip, dport);
 	fprintf(fout, "%lu sockcalls\n", sockcalls.size());
@@ -194,8 +203,11 @@ void Records::print(FILE* fout){
 			fprintf(fout, "sendmsg: 0x%x %lu thread %lu\n", sc.sendmsg.flags, sc.sendmsg.size, sc.thread_id);
 		}else if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG){
 			fprintf(fout, "recvmsg: 0x%x %lu thread %lu\n", sc.recvmsg.flags, sc.recvmsg.size, sc.thread_id);
-		}else 
+		}else if (sc.type == DERAND_SOCKCALL_TYPE_CLOSE){
 			fprintf(fout, "close: %ld thread %lu\n", sc.close.timeout, sc.thread_id);
+		}else if (sc.type == DERAND_SOCKCALL_TYPE_SPLICE_READ){
+			fprintf(fout, "splice_read: 0x%x %lu thread %lu\n", sc.splice_read.flags, sc.splice_read.size, sc.thread_id);
+		}
 	}
 	fprintf(fout, "%lu events\n", evts.size());
 	for (int i = 0; i < evts.size(); i++){
@@ -365,6 +377,8 @@ void Records::print_init_data(FILE* fout){
 }
 
 void Records::clear(){
+	mode = 0;
+	broken = 0;
 	evts.clear();
 	sockcalls.clear();
 	jiffies.clear();

@@ -191,6 +191,26 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 	return sc_id;
 }
 
+static u32 new_splice_read(struct sock *sk, size_t len, unsigned int flags){
+	struct derand_recorder* rec = sk->recorder;
+	struct derand_rec_sockcall *rec_sc;
+	int sc_id;
+
+	if (!rec)
+		return 0;
+
+	// get sockcall ID
+	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
+	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
+	// store data for this sockcall
+	rec_sc->type = DERAND_SOCKCALL_TYPE_SPLICE_READ;
+	rec_sc->splice_read.flags = flags;
+	rec_sc->splice_read.size = len;
+	rec_sc->thread_id = (u64)current;
+	// return sockcall ID
+	return sc_id;
+}
+
 static u32 new_close(struct sock *sk, long timeout){
 	struct derand_recorder* rec = sk->recorder;
 	struct derand_rec_sockcall *rec_sc;
@@ -366,6 +386,7 @@ int bind_record_ops(void){
 	derand_record_ops.new_sendmsg = new_sendmsg;
 	//derand_record_ops.new_sendpage = new_sendpage;
 	derand_record_ops.new_recvmsg = new_recvmsg;
+	//derand_record_ops.new_splice_read = new_splice_read;
 	derand_record_ops.new_close = new_close;
 	derand_record_ops.sockcall_lock = sockcall_lock;
 	derand_record_ops.incoming_pkt = incoming_pkt;

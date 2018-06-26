@@ -225,6 +225,7 @@ void do_sockcall(int sockfd, derand_rec_sockcall sc, int id){
 		recv(sockfd, &buf[0], sc.recvmsg.size, sc.recvmsg.flags);
 	} else if (sc.type == DERAND_SOCKCALL_TYPE_CLOSE){
 		close(sockfd);
+	} else {
 	}
 	printf("sockcall %d finishes\n", id);
 }

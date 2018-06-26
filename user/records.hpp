@@ -94,7 +94,7 @@ struct BitArray{
 
 class Records{
 public:
-	uint32_t mode;
+	uint32_t mode, broken;
 	uint32_t recorder_id;
 	uint32_t sip, dip;
 	uint16_t sport, dport;

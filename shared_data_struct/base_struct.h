@@ -25,6 +25,12 @@ struct derand_rec_sockcall_tcp_close{
 	u8 type;
 	long timeout;
 };
+#define DERAND_SOCKCALL_TYPE_SPLICE_READ 3
+struct derand_rec_sockcall_tcp_splice_read{
+	u8 type;
+	int flags;
+	size_t size;
+};
 
 struct derand_rec_sockcall{
 	union{
@@ -32,6 +38,7 @@ struct derand_rec_sockcall{
 		struct derand_rec_sockcall_tcp_sendmsg sendmsg;
 		struct derand_rec_sockcall_tcp_recvmsg recvmsg;
 		struct derand_rec_sockcall_tcp_close close;
+		struct derand_rec_sockcall_tcp_splice_read splice_read;
 	};
 	u64 thread_id;
 };
@@ -46,6 +53,11 @@ static inline const char* get_sockcall_str(struct derand_rec_sockcall *sc, char*
 		case DERAND_SOCKCALL_TYPE_CLOSE:
 			sprintf(buf, "close");
 			break;
+		case DERAND_SOCKCALL_TYPE_SPLICE_READ:
+			sprintf(buf, "splice_read");
+			break;
+		default:
+			sprintf(buf, "unknown sockcall type %u", sc->type);
 	}
 	return buf;
 }
