@@ -68,6 +68,8 @@ struct GeneralEventQ{
 #endif /* DERAND_DEBUG */
 
 struct derand_replayer{
+	u32 mode; // 0: server, 1: client
+	u16 port; // the socket to replay should has this port number. Depending on mode, this is either sport (server) or dport (client)
 	struct tcp_sock_init_data init_data; // initial values for tcp_sock
 	u32 seq;
 	atomic_t sockcall_id; // current socket call ID

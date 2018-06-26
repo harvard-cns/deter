@@ -53,10 +53,14 @@ static int send_copy_finish(const string &proc_file_name){
 }
 
 int main(int argc, char **argv){
-	if (argc != 2){
-		fprintf(stderr, "Usage: ./replay <records>\n");
+	if (argc != 2 && argc != 3){
+		fprintf(stderr, "Usage: ./replay <records> [<dstip>]\n");
 		return -1;
 	}
+
+	string dip = "";
+	if (argc == 3)
+		dip = argv[2];
 
 	// setup shared memory
 	send_buffer_size("derand_replay");
@@ -70,12 +74,25 @@ int main(int argc, char **argv){
 	if (r.read_records(argv[1]))
 		goto fail_read_records;
 
+	// ensure we enter dip for client mode
+	if (r.rec.mode == 1 && dip == ""){
+		fprintf(stderr, "Please enter dstip for client replay\n");
+		goto no_dip;
+	}
+
 	// tell kernel copy finish
 	send_copy_finish("derand_replay");
 
 	// start replay
-	r.start_replay_server();
+	if (r.rec.mode == 0){
+		if (r.start_replay_server())
+			fprintf(stderr, "server socket setup fail\n");
+	}else {
+		if (r.start_replay_client(dip))
+			fprintf(stderr, "client socket setup fail\n");
+	}
 
+no_dip:
 fail_read_records:
 	kmem.unmap_mem();
 	return 0;

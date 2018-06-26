@@ -4,7 +4,7 @@
 #include <linux/tcp.h>
 #include "derand_replayer.h"
 
-static inline void copy_to_server_sock(struct sock *sk){
+static inline void copy_to_sock(struct sock *sk){
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct tcp_sock_init_data *d = &((struct derand_replayer*)sk->replayer)->init_data;

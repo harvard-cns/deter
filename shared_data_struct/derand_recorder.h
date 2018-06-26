@@ -110,6 +110,7 @@ static inline void add_geq(struct GeneralEventQ *geq, u32 type, u64 data){
 #define DERAND_SOCKCALL_PER_SOCK 4096
 
 struct derand_recorder{
+	u32 mode;
 	u32 sip, dip;
 	u16 sport, dport;
 	u32 recorder_id; // indicating how many sockets have used this recorder

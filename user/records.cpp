@@ -57,6 +57,10 @@ int Records::dump(const char* filename){
 	// transform raw data into final format 
 	transform();
 
+	// write mode
+	if (!fwrite(&mode, sizeof(mode), 1, fout))
+		goto fail_write;
+
 	// write 4 tuples
 	if (!fwrite(&sip, sizeof(sip)+sizeof(dip)+sizeof(sport)+sizeof(dport), 1, fout))
 		goto fail_write;
@@ -118,6 +122,10 @@ fail_write:
 int Records::read(const char* filename){
 	FILE* fin= fopen(filename, "r");
 	uint32_t len;
+	// read mode
+	if (!fread(&mode, sizeof(mode), 1, fin))
+		goto fail_read;
+
 	// read 4 tuples
 	if (!fread(&sip, sizeof(sip)+sizeof(dip)+sizeof(sport)+sizeof(dport), 1, fin))
 		goto fail_read;
@@ -177,6 +185,7 @@ fail_read:
 }
 
 void Records::print(FILE* fout){
+	fprintf(fout, "mode: %u\n", mode);
 	fprintf(fout, "%08x:%hu %08x:%hu\n", sip, sport, dip, dport);
 	fprintf(fout, "%lu sockcalls\n", sockcalls.size());
 	for (int i = 0; i < sockcalls.size(); i++){

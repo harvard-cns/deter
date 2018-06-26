@@ -25,7 +25,7 @@ out:
  * Called when a connection is successfully built
  * i.e., after receiving SYN-ACK at client and after receiving ACK at server.
  * So this function is called in bottom-half, so we must not block*/
-static void recorder_create(struct sock *sk, struct sk_buff *skb, int server_side){
+static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	int i;
 
 	// create derand_recorder
@@ -44,7 +44,11 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int server_sid
 	rec->dport = inet_sk(sk)->inet_dport;
 
 	// init PktIdx
-	rec->pkt_idx.init_ipid = rec->pkt_idx.last_ipid = ntohs(ip_hdr(skb)->id);
+	if (mode == 0){ // ipid is consecutive at this point only for server side
+		rec->pkt_idx.init_ipid = rec->pkt_idx.last_ipid = ntohs(ip_hdr(skb)->id);
+		rec->pkt_idx.first = 0;
+	}else // for client side, the next packet carries the first valid ipid
+		rec->pkt_idx.first = 1;
 	rec->pkt_idx.idx = 0;
 	rec->pkt_idx.fin = 0;
 
@@ -64,10 +68,12 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int server_sid
 	#if DERAND_DEBUG
 	rec->geq.h = rec->geq.t = 0;
 	#endif
-	if (server_side)
+	if (mode == 0)
 		copy_from_server_sock(sk); // copy sock init data
 	else 
 		copy_from_client_sock(sk);
+	rec->mode = mode;
+	wmb();
 	rec->recorder_id++;
 out:
 	return;
@@ -77,7 +83,7 @@ static void server_recorder_create(struct sock *sk, struct sk_buff *skb){
 	uint16_t sport = ntohs(inet_sk(sk)->inet_sport);
 	if ((sport >= 60000 && sport <= 60003) || sport == 50010){
 		printk("server sport = %hu, dport = %hu, creating recorder\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
-		recorder_create(sk, skb, 1);
+		recorder_create(sk, skb, 0);
 	}
 }
 static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
@@ -85,7 +91,7 @@ static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 	if ((dport >= 60000 && dport <= 60003) || dport == 50010){
 	//if (inet_sk(sk)->inet_dport == 0x8913){ // port 5001
 		printk("client sport = %hu, dport = %hu, creating recorder\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
-		recorder_create(sk, skb, 0);
+		recorder_create(sk, skb, 1);
 	}
 }
 
@@ -246,8 +252,16 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	// record fin
 	if (tcph->fin)
 		rec->pkt_idx.fin = 1;
-
+	
 	ipid = ntohs(iph->id);
+
+	if (rec->pkt_idx.first){
+		// this is the first valid ipid for client side, record and return
+		rec->pkt_idx.init_ipid = rec->pkt_idx.last_ipid = ipid;
+		rec->pkt_idx.first = 0;
+		return;
+	}
+
 	gap = get_pkt_idx_gap(&rec->pkt_idx, ipid);
 	idx = rec->pkt_idx.idx;
 

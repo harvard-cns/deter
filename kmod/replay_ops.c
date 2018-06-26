@@ -14,7 +14,7 @@ struct replay_ops replay_ops = {
 	.state = NOT_STARTED,
 	.sip = 0,
 	.dip = 0,
-	.sport = 0x60ea, // ntohs(60000)
+	.sport = 0,
 	.dport = 0,
 	.lock = __SPIN_LOCK_UNLOCKED(),
 };
@@ -189,19 +189,8 @@ static void set_null_timer(struct sock *sk){
 /*********************************************
  * hooks for replayer create/destruct
  ********************************************/
-static void server_recorder_create(struct sock *sk, struct sk_buff *skb){
-	uint16_t sport;
+static inline void replayer_create(struct sock *sk, struct sk_buff *skb){
 	struct derand_replayer *rep;
-
-	if (!replay_ops.replayer)
-		return;
-
-	// return if this is not the socket to replay
-	sport = inet_sk(sk)->inet_sport;
-	if (sport != replay_ops.sport)
-		return;
-
-	derand_log("a new server sock created\n");
 
 	// return if the replay has already started
 	spin_lock_bh(&replay_ops.lock);
@@ -214,11 +203,16 @@ static void server_recorder_create(struct sock *sk, struct sk_buff *skb){
 	rep = sk->replayer = replay_ops.replayer;
 	
 	// init PktIdx
-	rep->pkt_idx.init_ipid = rep->pkt_idx.last_ipid = ntohs(ip_hdr(skb)->id);
+	if (rep->mode == 0){ // ipid is consecutive at this point only for server side
+		rep->pkt_idx.init_ipid = rep->pkt_idx.last_ipid = ntohs(ip_hdr(skb)->id);
+		rep->pkt_idx.first = 0;
+	}else // for client side, the next packet carries the first valid ipid
+		rep->pkt_idx.first = 1;
 	rep->pkt_idx.idx = 0;
 	rep->pkt_idx.fin = 0;
 
 	// record 4 tuples
+	replay_ops.sport = inet_sk(sk)->inet_sport;
 	replay_ops.dport = inet_sk(sk)->inet_dport;
 	replay_ops.sip = inet_sk(sk)->inet_saddr;
 	replay_ops.dip = inet_sk(sk)->inet_daddr;
@@ -228,7 +222,7 @@ static void server_recorder_create(struct sock *sk, struct sk_buff *skb){
 
 	// copy sock init data
 	derand_log("copy init variables to the sock\n");
-	copy_to_server_sock(sk);
+	copy_to_sock(sk);
 
 	// set timer handlers to null function
 	derand_log("record timer; set timer to Null\n");
@@ -237,6 +231,44 @@ static void server_recorder_create(struct sock *sk, struct sk_buff *skb){
 	// mark started, so other sockets won't get replayed
 	replay_ops.state = STARTED;
 	spin_unlock_bh(&replay_ops.lock);
+}
+
+static void server_recorder_create(struct sock *sk, struct sk_buff *skb){
+	uint16_t sport;
+
+	if (!replay_ops.replayer)
+		return;
+
+	if (replay_ops.replayer->mode != 0)
+		return;
+
+	// return if this is not the socket to replay
+	sport = inet_sk(sk)->inet_sport;
+	if (sport != replay_ops.replayer->port)
+		return;
+
+	derand_log("a new server sock created\n");
+
+	replayer_create(sk, skb);
+}
+
+static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
+	uint16_t dport;
+
+	if (!replay_ops.replayer)
+		return;
+
+	if (replay_ops.replayer->mode != 1)
+		return;
+
+	// return if this is not the socket to replay
+	dport = inet_sk(sk)->inet_dport;
+	if (dport != replay_ops.replayer->port)
+		return;
+
+	derand_log("a new client sock created\n");
+
+	replayer_create(sk, skb);
 }
 
 static void recorder_destruct(struct sock *sk){
@@ -605,6 +637,7 @@ static inline bool should_replay_skb(struct sk_buff *skb){
 static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const struct nf_hook_state *state){
 	struct derand_replayer *rep;
 	u32 idx, last_idx, i;
+	u16 ipid;
 	bool drop = false;
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
@@ -625,9 +658,19 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 	if (tcph->fin)
 		rep->pkt_idx.fin = 1;
 
+	ipid = ntohs(iph->id);
+
+	if (rep->pkt_idx.first){
+		// this is the first valid ipid for client side, record and return
+		rep->pkt_idx.init_ipid = rep->pkt_idx.last_ipid = ipid;
+		rep->pkt_idx.first = 0;
+		// TODO: check CE bit
+		goto enqueue;
+	}
+
 	// update and get pkt idx
 	last_idx = rep->pkt_idx.idx;
-	idx = update_pkt_idx(&rep->pkt_idx, ntohs(iph->id));
+	idx = update_pkt_idx(&rep->pkt_idx, ipid);
 
 	// TODO: check if we should mark CE bit
 
@@ -724,6 +767,7 @@ int bind_replay_ops(void){
 
 	/* The recorder_create functions must be bind last, because they are the enabler of record */
 	derand_record_ops.server_recorder_create = server_recorder_create;
+	derand_record_ops.client_recorder_create = client_recorder_create;
 	return 0;
 }
 

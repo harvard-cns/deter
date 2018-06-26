@@ -99,6 +99,7 @@ struct PktIdx{
 	u16 init_ipid, last_ipid; // the ipid of the first packet, the ipid of the last packet
 	u32 idx; // the idx of the last packet
 	u8 fin; // if fin has appeared
+	u8 first; // if the first valid ipid is recorded or not
 };
 static inline u16 get_pkt_idx_gap(struct PktIdx *pkt_idx, u16 ipid){
 	return (u16)(ipid - pkt_idx->last_ipid);

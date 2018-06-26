@@ -28,6 +28,7 @@ public:
 
 	/* start the server side replay */
 	int start_replay_server();
+	int start_replay_client(const std::string &dip);
 	void start_replay();
 	void sockcall_thread(u64 id);
 };

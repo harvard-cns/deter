@@ -134,6 +134,11 @@ int Replayer::read_records(const string &record_file_name){
 	rec.transform();
 
 	// make d out of rec
+	d->mode = rec.mode;
+	if (rec.mode == 0) // server mode
+		d->port = htons(rec.sport);
+	else
+		d->port = htons(rec.dport);
 	d->init_data = rec.init_data;
 	d->seq = 0;
 	d->sockcall_id.counter = 0;
@@ -181,6 +186,28 @@ int Replayer::start_replay_server(){
 
 	// start replay
 	start_replay();
+
+	return 0;
+}
+
+int Replayer::start_replay_client(const string &dip){
+	sockaddr_in server_addr;
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (sockfd < 0){
+		perror("socket");
+		return -1;
+	}
+	server_addr.sin_family = AF_INET;
+	inet_aton(dip.c_str(), &server_addr.sin_addr);
+	server_addr.sin_port = htons(rec.dport);
+	if (connect(sockfd,(struct sockaddr *)&server_addr,sizeof(server_addr)) < 0) {
+		perror("connect");
+		return -2;
+	}
+
+	start_replay();
+
+	return 0;
 }
 
 void do_sockcall(int sockfd, derand_rec_sockcall sc, int id){

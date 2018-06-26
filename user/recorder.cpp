@@ -51,6 +51,7 @@ int main()
 				}
 
 				// start new
+				res[i].mode = rec->mode;
 				res[i].recorder_id = rec->recorder_id & (~0x1); // switch to the new socket's copy state
 				res[i].sip = ntohl(rec->sip);
 				res[i].dip = ntohl(rec->dip);
