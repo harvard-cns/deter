@@ -12,8 +12,15 @@
 #include "record_ops.h"
 #include "record_user_share.h"
 
+u32 dstip;
+module_param(dstip, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+MODULE_PARM_DESC(dstip, "A dstip to monitor");
+
 static int __init record_init(void)
 {
+	printk("dstip to monitor: 0x%08x\n", dstip);
+	mon_dstip = htonl(dstip); // mon_dstip is in record_ops.c
+
 	// create record_ctrl data
 	if (create_record_ctrl(4))
 		goto fail_create_ctrl;
