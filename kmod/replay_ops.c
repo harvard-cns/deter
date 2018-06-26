@@ -617,9 +617,11 @@ static bool replay_effect_bool(const struct sock *sk, int loc){
 	return (ebq->v[arr_idx] >> bit_idx) & 1;
 }
 
+#if DERAND_DEBUG
 static void replay_general_event(const struct sock *sk, int loc, u64 data){
 	check_geq(sk, loc + 1000, data);
 }
+#endif
 
 /****************************************
  * Packet corrector

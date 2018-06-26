@@ -184,7 +184,7 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
 	// store data for this sockcall
 	rec_sc->type = DERAND_SOCKCALL_TYPE_RECVMSG;
-	rec_sc->recvmsg.flags = nonblock & msg->msg_flags;
+	rec_sc->recvmsg.flags = nonblock | flags;
 	rec_sc->recvmsg.size = len;
 	rec_sc->thread_id = (u64)current;
 	// return sockcall ID

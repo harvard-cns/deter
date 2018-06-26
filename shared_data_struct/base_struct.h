@@ -3,7 +3,7 @@
 
 #include "tcp_sock_init_data.h"
 
-#define DERAND_DEBUG 1
+#define DERAND_DEBUG 0
 
 /* Different types of socket calls' ID starts with different highest 4 bits */
 #define DERAND_SOCK_ID_BASE 100
@@ -17,7 +17,7 @@ struct derand_rec_sockcall_tcp_sendmsg{
 #define DERAND_SOCKCALL_TYPE_RECVMSG 1
 struct derand_rec_sockcall_tcp_recvmsg{
 	u8 type;
-	int flags; // nonblock & flags
+	int flags; // nonblock | flags
 	size_t size;
 };
 #define DERAND_SOCKCALL_TYPE_CLOSE 2

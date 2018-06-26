@@ -167,22 +167,28 @@ int Replayer::read_records(const string &record_file_name){
 int Replayer::start_replay_server(){
 	// first listen, and wait for a working socket
 	int listen_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (listen_sock_fd < 0)
+	if (listen_sock_fd < 0){
+		perror("socket");
 		return -1;
+	}
 	sockaddr_in server_addr;
 	memset(&server_addr, 0, sizeof(sockaddr_in));
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = INADDR_ANY;
 	server_addr.sin_port = htons(rec.sport);
-	if (bind(listen_sock_fd, (sockaddr *) &server_addr, sizeof(server_addr)) < 0)
+	if (bind(listen_sock_fd, (sockaddr *) &server_addr, sizeof(server_addr)) < 0){
+		perror("bind");
 		return -2;
+	}
 	listen(listen_sock_fd, 1);
+	printf("listen sock created, listen on %hu\n", server_addr.sin_port);
 
 	// get a working socket sockfd
 	sockaddr_in client_addr;
 	socklen_t client_addr_len = sizeof(client_addr);
 	sockfd = accept(listen_sock_fd, (sockaddr *) &client_addr, &client_addr_len);
 	close(listen_sock_fd);
+	printf("client sock created\n");
 
 	// start replay
 	start_replay();
