@@ -8,6 +8,11 @@
 
 u32 mon_dstip = 0;
 
+static inline int is_valid_recorder(struct derand_recorder *rec){
+	int idx = rec - (struct derand_recorder*)record_ctrl.addr;
+	return idx >= 0 && idx < record_ctrl.max_sock;
+}
+
 // allocate memory for a socket
 static void* derand_alloc_mem(void){
 	void* ret = NULL;
@@ -302,7 +307,7 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 static void read_jiffies(const struct sock *sk, unsigned long v, int id){
 	struct derand_recorder* rec = sk->recorder;
 	struct jiffies_q *jf;
-	if (!rec)
+	if (!is_valid_recorder(rec))
 		return;
 	jf = &rec->jf;
 	#if DERAND_DEBUG
