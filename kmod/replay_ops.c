@@ -837,7 +837,7 @@ int replay_ops_start(struct derand_replayer *addr){
 }
 
 void replay_ops_stop(void){
-	if (replay_ops.state == STARTED)
+	if (replay_ops.state <= STARTED)
 		replay_ops.state = SHOULD_STOP;
 
 	derand_log("unbind_replay_ops\n");

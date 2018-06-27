@@ -4,7 +4,7 @@
 #include "base_struct.h"
 #include "tcp_sock_init_data.h"
 
-#define EVENT_Q_LEN 16384
+#define EVENT_Q_LEN 32768
 struct event_q{
 	u32 h, t;
 	struct derand_event v[EVENT_Q_LEN];
@@ -44,14 +44,14 @@ struct memory_allocated_q{
 };
 #define get_ma_q_idx(i) ((i) & (MEMORY_ALLOCATED_Q_LEN - 1))
 
-#define MSTAMP_Q_LEN 65536
+#define MSTAMP_Q_LEN 16384
 struct mstamp_q{
 	u32 h, t;
 	struct skb_mstamp v[MSTAMP_Q_LEN];
 };
 #define get_mstamp_q_idx(i) ((i) & (MSTAMP_Q_LEN - 1))
 
-#define EFFECT_BOOL_Q_LEN 8192
+#define EFFECT_BOOL_Q_LEN 32768
 struct effect_bool_q{
 	u32 h, t;
 	u32 v[EFFECT_BOOL_Q_LEN / 32];
