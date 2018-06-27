@@ -640,6 +640,7 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 	struct derand_replayer *rep;
 	u32 idx, last_idx, i;
 	u16 ipid;
+	int wrong_drop_cnt = 0, first_wrong = 0;
 	bool drop = false;
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
@@ -697,9 +698,14 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 		}
 
 		// if i should not drop, but mistakenly dropped, error
-		if (!drop && i < idx)
-			derand_log("Error: pkt wrong drop: idx %u\n", i);
+		if (!drop && i < idx){
+			if (wrong_drop_cnt == 0)
+				first_wrong = i;
+			wrong_drop_cnt++;
+		}
 	}
+	if (wrong_drop_cnt)
+		derand_log("Error: pkt wrong drop: first: idx %u, total: %d\n", first_wrong, wrong_drop_cnt);
 
 	if (drop)
 		return NF_DROP;
