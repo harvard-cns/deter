@@ -17,6 +17,7 @@ int create_record_ctrl(int max_sock){
 
 	// find the right number of pages 
 	int order = get_page_order(max_sock * sizeof(struct derand_recorder));
+	printk("[DERAND] need %lu Bytes, allocat %lu Bytes\n", (max_sock * sizeof(struct derand_recorder)), (1<<order) * 4096lu);
 
 	// allocate and reserve pages
 	record_ctrl.addr = (struct derand_recorder*)__get_free_pages(GFP_KERNEL, order);

@@ -7,7 +7,7 @@
 /***********************************
  * drop
  **********************************/
-#define DERAND_DROP_PER_SOCK 1024
+#define DERAND_DROP_PER_SOCK 256
 struct DropQ{
 	u32 h, t;
 	u32 v[DERAND_DROP_PER_SOCK];
@@ -17,7 +17,7 @@ struct DropQ{
 /************************************
  * jiffies
  ***********************************/
-#define DERAND_JIFFIES_PER_SOCK 1024 
+#define DERAND_JIFFIES_PER_SOCK 512
 struct jiffies_q{
 	unsigned long last_jiffies; // the last jiffies value
 	u32 h, t;
@@ -29,7 +29,7 @@ struct jiffies_q{
 /*************************************
  * memory_pressure
  ************************************/
-#define DERAND_MEMORY_PRESSURE_PER_SOCK 8192
+#define DERAND_MEMORY_PRESSURE_PER_SOCK 256
 /* struct for memory pressure */
 struct memory_pressure_q{
 	u32 h, t;
@@ -49,7 +49,7 @@ static inline void push_memory_pressure_q(struct memory_pressure_q *q, bool v){
 /*************************************
  * memory_allocated
  ************************************/
-#define DERAND_MEMORY_ALLOCATED_PER_SOCK 1024
+#define DERAND_MEMORY_ALLOCATED_PER_SOCK 256
 /* struct for memory_allocated */
 struct memory_allocated_q{
 	long last_v;
@@ -62,7 +62,7 @@ struct memory_allocated_q{
 /****************************************
  * skb_mstamp
  ***************************************/
-#define DERAND_MSTAMP_PER_SOCK 4096
+#define DERAND_MSTAMP_PER_SOCK 256
 struct mstamp_q{
 	u32 h, t;
 	struct skb_mstamp v[DERAND_MSTAMP_PER_SOCK];
@@ -72,7 +72,7 @@ struct mstamp_q{
 /****************************************
  * effect_bool
  ****************************************/
-#define DERAND_EFFECT_BOOL_PER_SOCK 2048
+#define DERAND_EFFECT_BOOL_PER_SOCK 1024
 struct effect_bool_q{
 	u32 h, t;
 	u32 v[DERAND_EFFECT_BOOL_PER_SOCK / 32];
@@ -106,8 +106,8 @@ static inline void add_geq(struct GeneralEventQ *geq, u32 type, u64 data){
 }
 #endif /* DERAND_DEBUG */
 
-#define DERAND_EVENT_PER_SOCK 4096
-#define DERAND_SOCKCALL_PER_SOCK 4096
+#define DERAND_EVENT_PER_SOCK 1024
+#define DERAND_SOCKCALL_PER_SOCK 256
 
 struct derand_recorder{
 	u32 mode;

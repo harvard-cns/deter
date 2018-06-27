@@ -23,7 +23,7 @@ static int __init record_init(void)
 	mon_dstip = htonl(dstip); // mon_dstip is in record_ops.c
 
 	// create record_ctrl data
-	if (create_record_ctrl(4))
+	if (create_record_ctrl(32))
 		goto fail_create_ctrl;
 
 	// expose data to user space
