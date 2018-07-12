@@ -90,6 +90,10 @@ struct BitArray{
 				fprintf(fout, "%u\n", v[i]);
 		}
 	}
+
+	uint64_t raw_storage_size(){
+		return sizeof(n) + sizeof(uint32_t) * v.size();
+	}
 };
 
 class Records{
@@ -119,6 +123,8 @@ public:
 	void print(FILE* fout = stdout);
 	void print_init_data(FILE* fout = stdout);
 	void clear();
+	void print_raw_storage_size();
+	void print_compressed_storage_size();
 };
 
 #endif /* _RECORDS_HPP */

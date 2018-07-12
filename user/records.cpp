@@ -1,5 +1,7 @@
 #include <cstring>
 #include <unordered_map>
+#include <cmath>
+#include <map>
 #include "records.hpp"
 
 using namespace std;
@@ -391,4 +393,128 @@ void Records::clear(){
 	#if DERAND_DEBUG
 	geq.clear();
 	#endif
+}
+
+uint64_t get_sockcall_key(derand_rec_sockcall &sc){
+	uint64_t key = sc.type;
+	if (sc.type == DERAND_SOCKCALL_TYPE_CLOSE){
+		key <<= 32;
+		key |= sc.close.timeout;
+		key <<= 30;
+	}else if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG){
+		key <<= 32;
+		key |= sc.sendmsg.flags;
+		key <<= 30;
+		key |= sc.sendmsg.size & ((1<<30)-1);
+	}else if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG){
+		key <<= 32;
+		key |= sc.recvmsg.flags;
+		key <<= 30;
+		key |= sc.recvmsg.size & ((1<<30)-1);
+	}else if (sc.type == DERAND_SOCKCALL_TYPE_SPLICE_READ){
+		key <<= 32;
+		key |= sc.splice_read.flags;
+		key <<= 30;
+		key |= sc.splice_read.size & ((1<<30)-1);
+	}
+	return key;
+}
+
+void Records::print_raw_storage_size(){
+	uint64_t size = 0;
+	size += sizeof(init_data);
+	printf("init_data: %lu\n", sizeof(init_data));
+	size += sizeof(derand_event) * evts.size();
+	printf("evts: %lu\n", sizeof(derand_event) * evts.size());
+	size += sizeof(derand_rec_sockcall) * sockcalls.size();
+	printf("sockcalls: %lu\n", sizeof(derand_rec_sockcall) * sockcalls.size());
+	//size += sizeof(uint32_t) * dpq.size();
+	//printf("dpq: %lu\n", sizeof(uint32_t) * dpq.size());
+	size += sizeof(jiffies_rec) * jiffies.size();
+	printf("jiffies: %lu\n", sizeof(jiffies_rec) * jiffies.size());
+	size += mpq.raw_storage_size();
+	printf("mpq: %lu\n", mpq.raw_storage_size());
+	size += sizeof(memory_allocated_rec) * memory_allocated.size();
+	printf("memory_allocated: %lu\n", sizeof(memory_allocated_rec) * memory_allocated.size());
+	size += sizeof(skb_mstamp) * mstamp.size();
+	printf("mstamp: %lu\n", sizeof(skb_mstamp) * mstamp.size());
+	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
+		size += ebq[i].raw_storage_size();
+		printf("ebq[%d]: %lu\n", i, ebq[i].raw_storage_size());
+	}
+	printf("total: %lu\n", size);
+}
+
+void Records::print_compressed_storage_size(){
+	uint64_t size = 0;
+	size += sizeof(init_data);
+	printf("init_data: %lu\n", sizeof(init_data));
+	{
+		uint64_t this_size = 0, cnt = 0;
+		// | 16bit seq# delta | 2bit code | data (variable size) |
+		// if code == 00: data = event type (tasklet/timeout) (6bit)
+		// if code == 10: data = # consecutive sockcall (6bit)
+		// if code == 11: data = # consecutive sockcall (6bit) | thread_id (8bit)
+		for (int i = 0; i < evts.size(); i++){
+			if (evts[i].type < DERAND_SOCK_ID_BASE){
+				this_size += 3;
+			}else {
+				uint64_t this_thread_id = sockcalls[get_sockcall_idx(evts[i].type)].thread_id;
+				if (i > 0 &&
+					evts[i-1].type >= DERAND_SOCK_ID_BASE &&
+					sockcalls[get_sockcall_idx(evts[i-1].type)].thread_id == this_thread_id &&
+					cnt < 64){
+					cnt++;
+				}else{
+					this_size += 3 + (this_thread_id != 0);
+					cnt = 0;
+				}
+			}
+		}
+		size += this_size;
+		printf("evts: %lu\n", this_size);
+	}
+
+	{
+		uint64_t this_size = 0;
+		for (int i = 0; i < sockcalls.size(); i++){
+			if (i > 0 && get_sockcall_key(sockcalls[i]) == get_sockcall_key(sockcalls[i-1])){
+			}else
+				this_size += 1 + 4 + 4 + 1; // 2bit type, 6bit #consecutive same sockcall, 32bit flags, 32bit size, 8bit thread_id
+		}
+		size += this_size;
+		printf("sockcalls: %lu\n", this_size);
+	}
+	//size += sizeof(uint32_t) * dpq.size();
+	//printf("dpq: %lu\n", sizeof(uint32_t) * dpq.size());
+	size += sizeof(jiffies_rec) * jiffies.size();
+	printf("jiffies: %lu\n", sizeof(jiffies_rec) * jiffies.size());
+	size += mpq.raw_storage_size();
+	printf("mpq: %lu\n", mpq.raw_storage_size());
+	size += sizeof(memory_allocated_rec) * memory_allocated.size();
+	printf("memory_allocated: %lu\n", sizeof(memory_allocated_rec) * memory_allocated.size());
+	{
+		uint64_t jiffies_size = 0, us_size = 0;
+		// stamp_jiffies
+		for (int i = 0; i < mstamp.size(); i++){
+			if (i == 0 || mstamp[i].stamp_jiffies != mstamp[i-1].stamp_jiffies)
+				jiffies_size += 8; // 32bit jiffies delta, 32bit idx delta
+		}
+		// stamp_us
+		uint64_t us_bits = 0;
+		for (int i = 0; i < mstamp.size(); i++){
+			if (i == 0 || mstamp[i].stamp_us - mstamp[i-1].stamp_us >= 15)
+				us_bits += 4 + 32; // 4bit 0xf (meaning delta >= 15), 32bit delta
+			else
+				us_bits += 4; // 4bit delta
+		}
+		us_size = us_bits/8;
+		size += jiffies_size + us_size;
+		printf("mstamp: jiffies: %lu us: %lu total: %lu\n", jiffies_size, us_size, jiffies_size+us_size);
+	}
+	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
+		size += ebq[i].raw_storage_size();
+		printf("ebq[%d]: %lu\n", i, ebq[i].raw_storage_size());
+	}
+	printf("total: %lu\n", size);
 }
