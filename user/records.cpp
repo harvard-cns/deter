@@ -487,13 +487,21 @@ void Records::print_compressed_storage_size(){
 		}
 		this_size += 4 * flag_id.size();
 		// store each sockcall. Normally # diff flag combination <= 16, so flag_id is 4bit
-		int cnt = 0;
+		int cnt = 0, last_thread_id = 0, thread_id_bytes = 0;
 		for (int i = 0; i < sockcalls.size(); i++){
 			if (i > 0 && get_sockcall_key(sockcalls[i]) == get_sockcall_key(sockcalls[i-1]) && cnt < 16){
 				cnt++;
 			}else{
-				this_size += 4; // 2bit type, 4bit #consecutive same sockcall, 4bit flag_id, 22bit size
+				this_size += 4 + thread_id_bytes; // 2bit type, 4bit #consecutive same sockcall, 4bit flag_id, 22bit size, variable thread_id_bytes
 				cnt = 0;
+			}
+			// update storage for thread_id
+			if (sockcalls[i].thread_id > last_thread_id){
+				if (sockcalls[i].thread_id >= (1 << (thread_id_bytes*8))){
+					thread_id_bytes++;
+					this_size += 4; // record the idx where thread_id_bytes increases
+				}
+				last_thread_id = sockcalls[i].thread_id;
 			}
 		}
 		size += this_size;
