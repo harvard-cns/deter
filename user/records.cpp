@@ -477,10 +477,24 @@ void Records::print_compressed_storage_size(){
 
 	{
 		uint64_t this_size = 0;
+		// assign a unique id to each unique flag
+		map<int,int> flag_id;
 		for (int i = 0; i < sockcalls.size(); i++){
-			if (i > 0 && get_sockcall_key(sockcalls[i]) == get_sockcall_key(sockcalls[i-1])){
-			}else
-				this_size += 1 + 4 + 4 + 1; // 2bit type, 6bit #consecutive same sockcall, 32bit flags, 32bit size, 8bit thread_id
+			if (sockcalls[i].type != DERAND_SOCKCALL_TYPE_CLOSE && flag_id.find(sockcalls[i].sendmsg.flags) == flag_id.end()){
+				uint64_t id = flag_id.size();
+				flag_id[sockcalls[i].sendmsg.flags] = id;
+			}
+		}
+		this_size += 4 * flag_id.size();
+		// store each sockcall. Normally # diff flag combination <= 16, so flag_id is 4bit
+		int cnt = 0;
+		for (int i = 0; i < sockcalls.size(); i++){
+			if (i > 0 && get_sockcall_key(sockcalls[i]) == get_sockcall_key(sockcalls[i-1]) && cnt < 16){
+				cnt++;
+			}else{
+				this_size += 4; // 2bit type, 4bit #consecutive same sockcall, 4bit flag_id, 22bit size
+				cnt = 0;
+			}
 		}
 		size += this_size;
 		printf("sockcalls: %lu\n", this_size);
