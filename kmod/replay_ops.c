@@ -233,18 +233,22 @@ static inline void replayer_create(struct sock *sk, struct sk_buff *skb){
 	spin_unlock_bh(&replay_ops.lock);
 }
 
-static void server_recorder_create(struct sock *sk, struct sk_buff *skb){
+static int to_replay_server(struct sock *sk){
 	uint16_t sport;
 
 	if (!replay_ops.replayer)
-		return;
+		return false;
 
 	if (replay_ops.replayer->mode != 0)
-		return;
+		return false;
 
-	// return if this is not the socket to replay
+	// return false if this is not the socket to replay
 	sport = inet_sk(sk)->inet_sport;
-	if (sport != replay_ops.replayer->port)
+	return sport == replay_ops.replayer->port;
+}
+
+static void server_recorder_create(struct sock *sk, struct sk_buff *skb){
+	if (!to_replay_server(sk))
 		return;
 
 	derand_log("a new server sock created\n");
@@ -760,6 +764,7 @@ int bind_replay_ops(void){
 	derand_record_ops.delack_timer_before_lock = delack_timer_before_lock;
 	derand_record_ops.keepalive_timer_before_lock = keepalive_timer_before_lock;
 	derand_record_ops.tasklet_before_lock = tasklet_before_lock;
+	derand_record_ops.to_replay_server = to_replay_server;
 
 	derand_record_ops.replay_jiffies = replay_jiffies;
 	derand_record_ops.replay_tcp_time_stamp = replay_jiffies;
