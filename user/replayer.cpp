@@ -290,7 +290,7 @@ void Replayer::start_replay(){
 	printf("wait to finish\n");
 	while (seq < d->evtq.v[get_event_q_idx(d->evtq.t)].seq);
 	printf("finish!\n");
-	close(sockfd);
+	//close(sockfd);
 }
 
 /*

@@ -529,7 +529,7 @@ static unsigned long replay_jiffies(const struct sock *sk, int id){
 	check_geq(sk, 1, id);
 	#endif
 	if (jfq->h >= jfq->t){
-		derand_log("Warning: more jiffies reads then recorded\n");
+		derand_log("Warning: more jiffies reads then recorded %d\n", id);
 		return jfq->last_jiffies;
 	}
 	if (jfq->h == 0){
@@ -601,7 +601,7 @@ static void replay_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int lo
 	check_geq(sk, 5, loc);
 	#endif
 	if (msq->h >= msq->t){
-		derand_log("Warning: more skb_mstamp_get than recorded\n");
+		derand_log("Warning: more skb_mstamp_get than recorded %d\n", loc);
 		*cl = msq->v[get_mstamp_q_idx(msq->t - 1)];
 		return;
 	}

@@ -3,7 +3,7 @@
 
 #include "tcp_sock_init_data.h"
 
-#define DERAND_DEBUG 0
+#define DERAND_DEBUG 1
 
 /* Different types of socket calls' ID starts with different highest 4 bits */
 #define DERAND_SOCK_ID_BASE 100
