@@ -356,6 +356,14 @@ static inline void wait_before_lock(struct sock *sk, u32 type){
 		// if this is in __release_sock, bh is disabled. We cannot busy wait here because it prevents softirq accepting new packets (NET_RX), which we are waiting for, causing deadlock!
 		if (type >= DERAND_SOCK_ID_BASE && in_softirq())
 			cond_resched_softirq();
+		{
+			u32 evtq_type = evtq->v[get_event_q_idx(evtq->h)].type;
+			if (*seq == evtq->v[get_event_q_idx(evtq->h)].seq && evtq_type >= DERAND_SOCK_ID_BASE && type >= DERAND_SOCK_ID_BASE){
+				u32 evtq_sc_id = (evtq_type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
+				u32 evtq_loc = (evtq_type - DERAND_SOCK_ID_BASE) >> 28;
+				derand_log("current sockcall %u (%u %u) != expected sockcall $%u (%u %u)\n", sc_id, loc >> 1, loc & 1, evtq_sc_id, evtq_loc >> 1, evtq_loc & 1);
+			}
+		}
 		#if DERAND_DEBUG
 		if (!(cnt & 0xffffff)){
 			volatile u32 *q_h = &pkt_q.h, *q_t = &pkt_q.t;
