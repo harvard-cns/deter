@@ -304,7 +304,7 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	update_pkt_idx(&rec->pkt_idx, ipid);
 }
 
-static void read_jiffies(const struct sock *sk, unsigned long v, int id){
+static void _read_jiffies(const struct sock *sk, unsigned long v, int id){
 	struct derand_recorder* rec = sk->recorder;
 	struct jiffies_q *jf;
 	if (!is_valid_recorder(rec))
@@ -327,6 +327,12 @@ static void read_jiffies(const struct sock *sk, unsigned long v, int id){
 		jf->t++;
 	}else
 		jf->idx_delta++;
+}
+static void read_jiffies(const struct sock *sk, unsigned long v, int id){
+	_read_jiffies(sk, v, id + 100);
+}
+static void read_tcp_time_stamp(const struct sock *sk, unsigned long v, int id){
+	_read_jiffies(sk, v, id);
 }
 
 static void record_tcp_under_memory_pressure(const struct sock *sk, bool ret){
@@ -410,7 +416,7 @@ int bind_record_ops(void){
 	derand_record_ops.tasklet = tasklet;
 	derand_record_ops.mon_net_action = mon_net_action;
 	derand_record_ops.read_jiffies = read_jiffies;
-	derand_record_ops.read_tcp_time_stamp = read_jiffies; // store jiffies and tcp_time_stamp together
+	derand_record_ops.read_tcp_time_stamp = read_tcp_time_stamp; // store jiffies and tcp_time_stamp together
 	derand_record_ops.tcp_under_memory_pressure = record_tcp_under_memory_pressure;
 	derand_record_ops.sk_under_memory_pressure = record_sk_under_memory_pressure;
 	derand_record_ops.sk_memory_allocated = record_sk_memory_allocated;

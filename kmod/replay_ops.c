@@ -529,7 +529,7 @@ static void tasklet(struct sock *sk){
 /************************************
  * read values
  ***********************************/
-static unsigned long replay_jiffies(const struct sock *sk, int id){
+static unsigned long _replay_jiffies(const struct sock *sk, int id){
 	struct jiffies_q *jfq = &((struct derand_replayer*)sk->replayer)->jfq;
 	#if DERAND_DEBUG
 	// check general event sequence
@@ -552,6 +552,12 @@ static unsigned long replay_jiffies(const struct sock *sk, int id){
 		}
 	}
 	return jfq->last_jiffies;
+}
+static unsigned long replay_jiffies(const struct sock *sk, int id){
+	return _replay_jiffies(sk, id + 100);
+}
+static unsigned long replay_tcp_time_stamp(const struct sock *sk, int id){
+	return _replay_jiffies(sk, id);
 }
 
 static bool replay_tcp_under_memory_pressure(const struct sock *sk){
@@ -782,7 +788,7 @@ int bind_replay_ops(void){
 	derand_record_ops.to_replay_server = to_replay_server;
 
 	derand_record_ops.replay_jiffies = replay_jiffies;
-	derand_record_ops.replay_tcp_time_stamp = replay_jiffies;
+	derand_record_ops.replay_tcp_time_stamp = replay_tcp_time_stamp;
 	derand_record_ops.replay_tcp_under_memory_pressure = replay_tcp_under_memory_pressure;
 	derand_record_ops.replay_sk_under_memory_pressure = replay_tcp_under_memory_pressure;
 	derand_record_ops.replay_sk_memory_allocated = replay_sk_memory_allocated;
