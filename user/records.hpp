@@ -116,7 +116,7 @@ public:
 	std::vector<GeneralEvent> geq;
 	#endif
 
-	Records() : recorder_id(-1) {}
+	Records() : broken(0), recorder_id(-1) {}
 	void transform(); // transform raw data to final format
 	int dump(const char* filename = NULL);
 	int read(const char* filename);
