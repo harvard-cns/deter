@@ -62,7 +62,7 @@ struct memory_allocated_q{
 /****************************************
  * skb_mstamp
  ***************************************/
-#define DERAND_MSTAMP_PER_SOCK 1024
+#define DERAND_MSTAMP_PER_SOCK 512
 struct mstamp_q{
 	u32 h, t;
 	struct skb_mstamp v[DERAND_MSTAMP_PER_SOCK];
