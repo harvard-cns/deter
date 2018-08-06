@@ -206,8 +206,14 @@ static inline void replayer_create(struct sock *sk, struct sk_buff *skb){
 	if (rep->mode == 0){ // ipid is consecutive at this point only for server side
 		rep->pkt_idx.init_ipid = rep->pkt_idx.last_ipid = ntohs(ip_hdr(skb)->id);
 		rep->pkt_idx.first = 0;
-	}else // for client side, the next packet carries the first valid ipid
+	}else { // in our custom kernel, the first data/ack packet has ipid 1
+		rep->pkt_idx.init_ipid = rep->pkt_idx.last_ipid = 0; // we set last_ipid to 0, so the next data/ack pkt should just be 0 +1 = 1
+		rep->pkt_idx.first = 0;
+		/*
+		// for client side, the next packet carries the first valid ipid
 		rep->pkt_idx.first = 1;
+		*/
+	}
 	rep->pkt_idx.idx = 0;
 	rep->pkt_idx.fin = 0;
 

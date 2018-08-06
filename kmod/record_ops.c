@@ -55,8 +55,14 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	if (mode == 0){ // ipid is consecutive at this point only for server side
 		rec->pkt_idx.init_ipid = rec->pkt_idx.last_ipid = ntohs(ip_hdr(skb)->id);
 		rec->pkt_idx.first = 0;
-	}else // for client side, the next packet carries the first valid ipid
+	}else { // in our custom kernel, the first data/ack packet has ipid 1
+		rec->pkt_idx.init_ipid = rec->pkt_idx.last_ipid = 0; // we set last_ipid to 0, so the next data/ack pkt should just be 0 +1 = 1
+		rec->pkt_idx.first = 0;
+		/*
+		// for client side, the next packet carries the first valid ipid
 		rec->pkt_idx.first = 1;
+		*/
+	}
 	rec->pkt_idx.idx = 0;
 	rec->pkt_idx.fin = 0;
 
