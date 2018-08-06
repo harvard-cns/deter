@@ -110,7 +110,13 @@ static inline char* get_event_name(u32 type, char* buf){
 struct PktIdx{
 	u16 init_ipid, last_ipid; // the ipid of the first packet, the ipid of the last packet
 	u32 idx; // the idx of the last packet
-	u8 fin; // if fin has appeared
+	union{
+		struct {
+			u32 fin_seq; // the seq of fin
+			u32 fin; // if this side's fin_seq is set
+		};
+		u64 fin_v64; // for setting fin_seq and fin atomically
+	};
 	u8 first; // if the first valid ipid is recorded or not
 };
 static inline u16 get_pkt_idx_gap(struct PktIdx *pkt_idx, u16 ipid){

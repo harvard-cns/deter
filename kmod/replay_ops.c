@@ -215,6 +215,7 @@ static inline void replayer_create(struct sock *sk, struct sk_buff *skb){
 		*/
 	}
 	rep->pkt_idx.idx = 0;
+	rep->pkt_idx.fin_seq = 0;
 	rep->pkt_idx.fin = 0;
 
 	// record 4 tuples
@@ -532,6 +533,13 @@ static void tasklet(struct sock *sk){
 	new_event(sk, EVENT_TYPE_TASKLET);
 }
 
+static void record_fin_seq(struct sock *sk){
+	struct derand_replayer *r = (struct derand_replayer*)sk->replayer;
+	if (!r)
+		return;
+	r->pkt_idx.fin_v64 = tcp_sk(sk)->write_seq | (0x100000000);
+}
+
 /************************************
  * read values
  ***********************************/
@@ -685,12 +693,9 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 		derand_log("Received pkt: ipid: %hu seq: %u ack: %u\n", ntohs(iph->id), ntohl(tcph->seq), ntohl(tcph->ack_seq));
 	}
 
-	// if fin has appeared before, skip. ipid may not be consecutive after fin
-	if (rep->pkt_idx.fin)
+	// if this packet ackes our fin, skip. ipid from the other side may not be consecutive after acking our fin
+	if (rep->pkt_idx.fin && ntohl(tcph->ack_seq) == rep->pkt_idx.fin_seq + 1)
 		goto enqueue;
-	// record fin
-	if (tcph->fin)
-		rep->pkt_idx.fin = 1;
 
 	ipid = ntohs(iph->id);
 
@@ -784,6 +789,7 @@ int bind_replay_ops(void){
 	derand_record_ops.delack_timer = delack_timer;
 	derand_record_ops.keepalive_timer = keepalive_timer;
 	derand_record_ops.tasklet = tasklet;
+	derand_record_ops.record_fin_seq = record_fin_seq;
 
 	derand_record_ops.sockcall_before_lock = sockcall_before_lock;
 	derand_record_ops.incoming_pkt_before_lock = incoming_pkt_before_lock;

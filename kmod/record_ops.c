@@ -64,6 +64,7 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 		*/
 	}
 	rec->pkt_idx.idx = 0;
+	rec->pkt_idx.fin_seq = 0;
 	rec->pkt_idx.fin = 0;
 
 	// init variables
@@ -282,12 +283,9 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	if (!rec)
 		return;
 
-	// if fin has appeared before, skip. ipid may not be consecutive after fin
-	if (rec->pkt_idx.fin)
+	// if this packet ackes our fin, skip. ipid from the other side may not be consecutive after acking our fin
+	if (rec->pkt_idx.fin && ntohl(tcph->ack_seq) == rec->pkt_idx.fin_seq + 1)
 		return;
-	// record fin
-	if (tcph->fin)
-		rec->pkt_idx.fin = 1;
 	
 	ipid = ntohs(iph->id);
 
@@ -308,6 +306,13 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 		rec->dpq.t++;
 	}
 	update_pkt_idx(&rec->pkt_idx, ipid);
+}
+
+void record_fin_seq(struct sock *sk){
+	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
+	if (!rec)
+		return;
+	rec->pkt_idx.fin_v64 = tcp_sk(sk)->write_seq | (0x100000000);
 }
 
 static void _read_jiffies(const struct sock *sk, unsigned long v, int id){
@@ -421,6 +426,7 @@ int bind_record_ops(void){
 	derand_record_ops.keepalive_timer = keepalive_timer;
 	derand_record_ops.tasklet = tasklet;
 	derand_record_ops.mon_net_action = mon_net_action;
+	derand_record_ops.record_fin_seq = record_fin_seq;
 	derand_record_ops.read_jiffies = read_jiffies;
 	derand_record_ops.read_tcp_time_stamp = read_tcp_time_stamp; // store jiffies and tcp_time_stamp together
 	derand_record_ops.tcp_under_memory_pressure = record_tcp_under_memory_pressure;
