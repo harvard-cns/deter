@@ -4,6 +4,8 @@ else
 	cd ../pcap
 	bash dump.sh &
 
+	sleep 1
+
 	cd ../kmod
 	sudo insmod derand_replayer.ko
 
