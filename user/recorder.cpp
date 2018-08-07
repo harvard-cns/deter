@@ -103,18 +103,23 @@ int main()
 				for (j = rec->msq.h; j < rec->msq.t; j++)
 					res[i].mstamp.push_back(rec->msq.v[get_mstamp_q_idx(j)]);
 				rec->msq.h = j;
+				// copy skb_still_in_host_queue
+				res[i].broken |= (rec->siqq.h + DERAND_SKB_IN_QUEUE_PER_SOCK < rec->siqq.t) << 7;
+				for (j = rec->siqq.h; j < rec->siqq.t; j++)
+					res[i].siqq.push_back(rec->siqq.v[get_siq_q_idx(j)]);
+				rec->siqq.h = j;
 				// copy effect_bool
 				// for each effect bool location
 				for (int k = 0; k < DERAND_EFFECT_BOOL_N_LOC; k++){
 					effect_bool_q &ebq = rec->ebq[k];
-					res[i].broken |= (ebq.h + DERAND_EFFECT_BOOL_PER_SOCK < ebq.t) << (7 + k);
+					res[i].broken |= (ebq.h + DERAND_EFFECT_BOOL_PER_SOCK < ebq.t) << (8 + k);
 					for (j = ebq.h; j < (ebq.t & (~31)); j += 32)
 						res[i].ebq[k].push_back(ebq.v[get_effect_bool_q_idx(j) / 32]);
 					ebq.h = j;
 				}
 				#if DERAND_DEBUG
 				// copy GeneralEvent
-				res[i].broken |= (rec->geq.h + DERAND_GENERAL_EVENT_PER_SOCK < rec->geq.t) << (7 + DERAND_EFFECT_BOOL_N_LOC);
+				res[i].broken |= (rec->geq.h + DERAND_GENERAL_EVENT_PER_SOCK < rec->geq.t) << (8 + DERAND_EFFECT_BOOL_N_LOC);
 				for (j = rec->geq.h; j < rec->geq.t; j++)
 					res[i].geq.push_back(rec->geq.v[get_geq_idx(j)]);
 				rec->geq.h = j;

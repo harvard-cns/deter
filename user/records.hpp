@@ -111,6 +111,7 @@ public:
 	std::vector<memory_allocated_rec> memory_allocated;
 	uint32_t n_sockets_allocated;
 	std::vector<skb_mstamp> mstamp;
+	std::vector<uint8_t> siqq;
 	BitArray ebq[DERAND_EFFECT_BOOL_N_LOC];
 	#if DERAND_DEBUG
 	std::vector<GeneralEvent> geq;

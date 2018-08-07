@@ -21,6 +21,7 @@ public:
 	int convert_memory_pressure();
 	int convert_memory_allocated();
 	int convert_mstamp();
+	int convert_siqq();
 	int convert_effect_bool();
 	#if DERAND_DEBUG
 	int convert_general_event();

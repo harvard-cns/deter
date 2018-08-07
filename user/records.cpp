@@ -107,6 +107,10 @@ int Records::dump(const char* filename){
 	if (!dump_vector(mstamp, fout))
 		goto fail_write;
 
+	// write siqq
+	if (!dump_vector(siqq, fout))
+		goto fail_write;
+
 	// write effect_bool
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		if (!ebq[i].dump(fout))
@@ -174,6 +178,10 @@ int Records::read(const char* filename){
 
 	// read mstamp
 	if (!read_vector(mstamp, fin))
+		goto fail_read;
+
+	// read siqq
+	if (!read_vector(siqq, fin))
 		goto fail_read;
 
 	// read effect_bool
@@ -251,6 +259,10 @@ void Records::print(FILE* fout){
 	fprintf(fout, "%lu skb_mstamp_get:\n", mstamp.size());
 	for (int64_t i = 0; i < mstamp.size(); i++)
 		fprintf(fout, "%u %u\n", mstamp[i].stamp_us, mstamp[i].stamp_jiffies);
+
+	fprintf(fout, "%lu skb_still_in_host_queue:\n", siqq.size());
+	for (int64_t i = 0; i < siqq.size(); i++)
+		fprintf(fout, "%hhu\n", siqq[i]);
 
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
 		auto &eb = ebq[i];
@@ -388,6 +400,7 @@ void Records::clear(){
 	memory_allocated.clear();
 	n_sockets_allocated = 0;
 	mstamp.clear();
+	siqq.clear();
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		ebq[i].clear();
 	#if DERAND_DEBUG
@@ -438,6 +451,8 @@ void Records::print_raw_storage_size(){
 	printf("memory_allocated: %lu\n", sizeof(memory_allocated_rec) * memory_allocated.size());
 	size += sizeof(skb_mstamp) * mstamp.size();
 	printf("mstamp: %lu\n", sizeof(skb_mstamp) * mstamp.size());
+	size += sizeof(uint8_t) * siqq.size();
+	printf("siqq: %lu\n", sizeof(uint8_t) * siqq.size());
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
 		size += ebq[i].raw_storage_size();
 		printf("ebq[%d]: %lu\n", i, ebq[i].raw_storage_size());
@@ -534,6 +549,8 @@ void Records::print_compressed_storage_size(){
 		size += jiffies_size + us_size;
 		printf("mstamp: jiffies: %lu us: %lu total: %lu\n", jiffies_size, us_size, jiffies_size+us_size);
 	}
+	size += sizeof(uint8_t) * siqq.size();
+	printf("siqq: %lu\n", sizeof(uint8_t) * siqq.size());
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
 		size += ebq[i].raw_storage_size();
 		printf("ebq[%d]: %lu\n", i, ebq[i].raw_storage_size());

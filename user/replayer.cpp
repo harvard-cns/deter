@@ -94,6 +94,19 @@ int Replayer::convert_mstamp(){
 	return 0;
 }
 
+int Replayer::convert_siqq(){
+	auto &s = rec.siqq;
+	if (s.size() > SKB_IN_QUEUE_Q_LEN){
+		fprintf(stderr, "too many siqq: %lu > %u\n", s.size(), SKB_IN_QUEUE_Q_LEN);
+		return -1;
+	}
+	d->siqq.h = 0;
+	d->siqq.t = s.size();
+	if (s.size() > 0)
+		memcpy(d->siqq.v, &s[0], sizeof(uint8_t) * s.size());
+	return 0;
+}
+
 int Replayer::convert_effect_bool(){
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
 		auto &s = rec.ebq[i];
@@ -155,11 +168,13 @@ int Replayer::read_records(const string &record_file_name){
 		return -6;
 	if (convert_mstamp())
 		return -7;
-	if (convert_effect_bool())
+	if (convert_siqq())
 		return -8;
+	if (convert_effect_bool())
+		return -9;
 	#if DERAND_DEBUG
 	if (convert_general_event())
-		return -9;
+		return -10;
 	#endif
 	return 0;
 }
