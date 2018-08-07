@@ -58,6 +58,13 @@ struct effect_bool_q{
 };
 #define get_eb_q_idx(i) ((i) & (EFFECT_BOOL_Q_LEN - 1))
 
+#define SKB_IN_QUEUE_Q_LEN 256
+struct SkbInQueueQ{
+	u32 h, t;
+	bool v[SKB_IN_QUEUE_Q_LEN];
+};
+#define get_siq_q_idx(i) ((i) & (SKB_IN_QUEUE_Q_LEN - 1))
+
 #if DERAND_DEBUG
 #define GENERAL_EVENT_Q_LEN 65536
 struct GeneralEventQ{
@@ -81,6 +88,7 @@ struct derand_replayer{
 	struct memory_allocated_q maq;
 	struct mstamp_q msq;
 	struct effect_bool_q ebq[DERAND_EFFECT_BOOL_N_LOC]; // effect_bool
+	struct SkbInQueueQ siqq; // skb_still_in_host_queue
 	#if DERAND_DEBUG
 	struct GeneralEventQ geq;
 	#endif

@@ -2,6 +2,7 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
 #include <net/tcp.h>
+#include <linux/skbuff.h>
 #include <net/derand_ops.h>
 #include "replay_ops.h"
 #include "copy_to_sock_init_val.h"
@@ -656,6 +657,28 @@ static bool replay_effect_bool(const struct sock *sk, int loc){
 	return (ebq->v[arr_idx] >> bit_idx) & 1;
 }
 
+static bool replay_skb_still_in_host_queue(const struct sock *sk, const struct sk_buff *skb){
+	struct SkbInQueueQ *siqq = &((struct derand_replayer*)sk->replayer)->siqq;
+	bool ret;
+	if (siqq->h >= siqq->t){
+		derand_log("Warning: more skb_still_in_host_queue than recorded\n");
+		ret = false; // usually this is false
+	}else {
+		ret = siqq->v[get_siq_q_idx(siqq->h)];
+		siqq->h++;
+	}
+
+	// if true, the kernel code will skip the retransmission, so just return true
+	if (ret)
+		return ret;
+	// if false, the skb should not be in the queue. So we should wait until the skb is REALLY not in the queue
+	while (skb_fclone_busy(sk, skb)){
+		derand_log("skb_still_in_host_queue: false => true\n");
+		cond_resched_softirq(); // we need to allow bh, because freeing skb is in softirq
+	}
+	return ret;
+}
+
 #if DERAND_DEBUG
 static void replay_general_event(const struct sock *sk, int loc, u64 data){
 	check_geq(sk, loc + 1000, data);
@@ -806,6 +829,7 @@ int bind_replay_ops(void){
 	derand_record_ops.replay_sk_memory_allocated = replay_sk_memory_allocated;
 	derand_record_ops.replay_sk_socket_allocated_read_positive = replay_sk_socket_allocated_read_positive;
 	derand_record_ops.skb_mstamp_get = replay_skb_mstamp_get;
+	derand_record_ops.replay_skb_still_in_host_queue = replay_skb_still_in_host_queue;
 	#if DERAND_DEBUG
 	derand_record_ops.general_event = replay_general_event;
 	#endif

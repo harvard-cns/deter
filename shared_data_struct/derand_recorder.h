@@ -89,6 +89,16 @@ static inline void push_effect_bool_q(struct effect_bool_q *q, bool v){
 }
 
 /****************************************
+ * skb_still_in_host_queue
+ ****************************************/
+#define DERAND_SKB_IN_QUEUE_PER_SOCK 64
+struct SkbInQueueQ{
+	u32 h, t;
+	bool v[DERAND_SKB_IN_QUEUE_PER_SOCK];
+};
+#define get_siq_q_idx(i) ((i) & (DERAND_SKB_IN_QUEUE_PER_SOCK - 1))
+
+/****************************************
  * GeneralEvent
  ***************************************/
 #if DERAND_DEBUG
@@ -129,6 +139,7 @@ struct derand_recorder{
 	u32 n_sockets_allocated;
 	struct mstamp_q msq; // skb_mstamp
 	struct effect_bool_q ebq[DERAND_EFFECT_BOOL_N_LOC]; // effect_bool
+	struct SkbInQueueQ siqq; // skb_still_in_host_queue
 	#if DERAND_DEBUG
 	struct GeneralEventQ geq;
 	#endif

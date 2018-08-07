@@ -406,6 +406,12 @@ static void record_effect_bool(const struct sock *sk, int loc, bool v){
 	push_effect_bool_q(&((struct derand_recorder*)sk->recorder)->ebq[loc], v);
 }
 
+static void record_skb_still_in_host_queue(const struct sock *sk, bool ret){
+	struct SkbInQueueQ *siqq = &((struct derand_recorder*)sk->recorder)->siqq;
+	siqq->v[get_siq_q_idx(siqq->t)] = ret;
+	siqq->t++;
+}
+
 #if DERAND_DEBUG
 static void record_general_event(const struct sock *sk, int loc, u64 data){
 	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, loc + 1000, data);
@@ -434,6 +440,7 @@ int bind_record_ops(void){
 	derand_record_ops.sk_memory_allocated = record_sk_memory_allocated;
 	derand_record_ops.sk_sockets_allocated_read_positive = record_sk_sockets_allocated_read_positive;
 	derand_record_ops.skb_mstamp_get = record_skb_mstamp_get;
+	derand_record_ops.record_skb_still_in_host_queue = record_skb_still_in_host_queue;
 	#if DERAND_DEBUG
 	derand_record_ops.general_event = record_general_event;
 	#endif
