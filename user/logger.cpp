@@ -1,6 +1,7 @@
 #include <vector>
 #include <string>
 #include <thread>
+#include <signal.h>
 #include "kernel_typedef.hpp"
 #include "../shared_data_struct/logger.h"
 #include "mem_share.hpp"
@@ -26,6 +27,16 @@ void test_thread(Logger *logger){
 	}
 }
 
+volatile bool force_quit = false;
+static void signal_handler(int signum)
+{
+	if (signum == SIGINT || signum == SIGTERM) {
+		printf("\n\nSignal %d received, preparing to exit...\n",
+				signum);
+		force_quit = true;
+	}
+}
+
 int main(){
 	KernelMem kmem;
 	if (kmem.map_proc_exposed_mem(LOGGER_PROC_NAME, sizeof(Logger)))
@@ -33,8 +44,10 @@ int main(){
 
 	Logger *logger = (Logger*)kmem.buf;
 
+	signal(SIGINT, signal_handler);
+	signal(SIGTERM, signal_handler);
 	//thread th(test_thread, logger);
-	while (logger->running){
+	while (logger->running && !force_quit){
 		if (logger->h < (u32)logger->t.counter){
 			volatile uint8_t &ready = logger->buf[get_logger_idx(logger->h)][0];
 			for (uint32_t cnt = 1; !ready; cnt++){ // wait for ready
