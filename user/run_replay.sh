@@ -2,7 +2,7 @@ if [ $# -le 0 ]; then
 	echo "usage: bash run_replay.sh <record> [<dstip>]"
 else
 	cd ../pcap
-	bash dump.sh &
+	bash dump.sh replay.pcap &
 
 	sleep 1
 
