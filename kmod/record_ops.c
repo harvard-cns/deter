@@ -80,6 +80,7 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	rec->msq.h = rec->msq.t = 0;
 	for (i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		rec->ebq[i].h = rec->ebq[i].t = 0;
+	rec->siqq.h = rec->siqq.t = 0;
 	#if DERAND_DEBUG
 	rec->geq.h = rec->geq.t = 0;
 	#endif
