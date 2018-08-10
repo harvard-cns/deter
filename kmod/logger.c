@@ -58,11 +58,9 @@ void clear_logger(void){
 	spin_unlock(&logger_lock);
 }
 
-int derand_log(const char *fmt, ...){
+int derand_log_va(const char *fmt, va_list args){
 	int ret = 0;
 	u32 idx;
-	va_list args;
-	va_start(args, fmt);
 	//spin_lock(&logger_lock);
 	if (logger != NULL){
 		//while ((u32)atomic_read(&logger->t) - logger->h >= LOGGER_N_MSG); // wait for available space
@@ -79,5 +77,13 @@ int derand_log(const char *fmt, ...){
 		//logger->t++;
 	}
 	//spin_unlock(&logger_lock);
+	return ret;
+}
+int derand_log(const char *fmt, ...){
+	int ret = 0;
+	va_list args;
+	va_start(args, fmt);
+	ret = derand_log_va(fmt, args);
+	va_end(args);
 	return ret;
 }
