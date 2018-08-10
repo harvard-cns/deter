@@ -36,15 +36,6 @@ struct memory_pressure_q{
 	u32 v[DERAND_MEMORY_PRESSURE_PER_SOCK / 32];
 };
 #define get_memory_pressure_q_idx(i) ((i) & (DERAND_MEMORY_PRESSURE_PER_SOCK - 1))
-static inline void push_memory_pressure_q(struct memory_pressure_q *q, bool v){
-	u32 idx = get_memory_pressure_q_idx(q->t);
-	u32 bit_idx = idx & 31, arr_idx = idx / 32;
-	q->t++;
-	if (bit_idx == 0)
-		q->v[arr_idx] = (u32)v;
-	else
-		q->v[arr_idx] |= ((u32)v) << bit_idx;
-}
 
 /*************************************
  * memory_allocated
@@ -78,15 +69,6 @@ struct effect_bool_q{
 	u32 v[DERAND_EFFECT_BOOL_PER_SOCK / 32];
 };
 #define get_effect_bool_q_idx(i) ((i) & (DERAND_EFFECT_BOOL_PER_SOCK - 1))
-static inline void push_effect_bool_q(struct effect_bool_q *q, bool v){
-	u32 idx = get_effect_bool_q_idx(q->t);
-	u32 bit_idx = idx & 31, arr_idx = idx / 32;
-	q->t++;
-	if (bit_idx == 0)
-		q->v[arr_idx] = (u32)v;
-	else
-		q->v[arr_idx] |= ((u32)v) << bit_idx;
-}
 
 /****************************************
  * skb_still_in_host_queue
@@ -108,12 +90,6 @@ struct GeneralEventQ{
 	struct GeneralEvent v[DERAND_GENERAL_EVENT_PER_SOCK];
 };
 #define get_geq_idx(i) ((i) & (DERAND_GENERAL_EVENT_PER_SOCK - 1))
-static inline void add_geq(struct GeneralEventQ *geq, u32 type, u64 data){
-	struct GeneralEvent *ge = &geq->v[get_geq_idx(geq->t)];
-	ge->type = type;
-	*(u64*)(ge->data) = data;
-	geq->t++;
-}
 #endif /* DERAND_DEBUG */
 
 #define DERAND_EVENT_PER_SOCK 1024

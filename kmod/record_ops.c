@@ -13,6 +13,16 @@ static inline int is_valid_recorder(struct derand_recorder *rec){
 	return idx >= 0 && idx < record_ctrl.max_sock;
 }
 
+#if DERAND_DEBUG
+static inline void add_geq(struct GeneralEventQ *geq, u32 type, u64 data){
+	struct GeneralEvent *ge = &geq->v[get_geq_idx(geq->t)];
+	ge->type = type;
+	*(u64*)(ge->data) = data;
+	wmb();
+	geq->t++;
+}
+#endif /* DERAND_DEBUG */
+
 // allocate memory for a socket
 static void* derand_alloc_mem(void){
 	void* ret = NULL;
@@ -129,6 +139,7 @@ static inline void new_event(struct sock *sk, u32 type){
 	#else
 	rec->evts[get_evt_q_idx(rec->evt_t)] = (struct derand_event){.seq = seq, .type = type};
 	#endif
+	wmb();
 	rec->evt_t++;
 }
 
@@ -329,6 +340,7 @@ static void _read_jiffies(const struct sock *sk, unsigned long v, int id){
 		jf->v[0].init_jiffies = v;
 		jf->last_jiffies = v;
 		jf->idx_delta = 0;
+		wmb();
 		jf->t = 1;
 	}else if (v != jf->last_jiffies) {
 		union jiffies_rec *jf_rec = &jf->v[get_jiffies_q_idx(jf->t)];
@@ -336,6 +348,7 @@ static void _read_jiffies(const struct sock *sk, unsigned long v, int id){
 		jf_rec->idx_delta = jf->idx_delta + 1;
 		jf->last_jiffies = v;
 		jf->idx_delta = 0;
+		wmb();
 		jf->t++;
 	}else
 		jf->idx_delta++;
@@ -347,6 +360,16 @@ static void read_tcp_time_stamp(const struct sock *sk, unsigned long v, int id){
 	_read_jiffies(sk, v, id);
 }
 
+static inline void push_memory_pressure_q(struct memory_pressure_q *q, bool v){
+	u32 idx = get_memory_pressure_q_idx(q->t);
+	u32 bit_idx = idx & 31, arr_idx = idx / 32;
+	if (bit_idx == 0)
+		q->v[arr_idx] = (u32)v;
+	else
+		q->v[arr_idx] |= ((u32)v) << bit_idx;
+	wmb();
+	q->t++;
+}
 static void record_tcp_under_memory_pressure(const struct sock *sk, bool ret){
 	#if DERAND_DEBUG
 	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 2, ret);
@@ -370,6 +393,7 @@ static void record_sk_memory_allocated(const struct sock *sk, long ret){
 		maq->v[0].init_v = ret;
 		maq->last_v = ret;
 		maq->idx_delta = 0;
+		wmb();
 		maq->t = 1;
 	}else if (ret != maq->last_v){
 		union memory_allocated_rec *ma_rec = &maq->v[get_memory_allocated_q_idx(maq->t)];
@@ -377,6 +401,7 @@ static void record_sk_memory_allocated(const struct sock *sk, long ret){
 		ma_rec->idx_delta = maq->idx_delta + 1;
 		maq->last_v = ret;
 		maq->idx_delta = 0;
+		wmb();
 		maq->t++;
 	}else 
 		maq->idx_delta++;
@@ -396,9 +421,20 @@ static void record_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int lo
 	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 5, loc);
 	#endif
 	msq->v[get_mstamp_q_idx(msq->t)] = *cl;
+	wmb();
 	msq->t++;
 }
 
+static inline void push_effect_bool_q(struct effect_bool_q *q, bool v){
+	u32 idx = get_effect_bool_q_idx(q->t);
+	u32 bit_idx = idx & 31, arr_idx = idx / 32;
+	if (bit_idx == 0)
+		q->v[arr_idx] = (u32)v;
+	else
+		q->v[arr_idx] |= ((u32)v) << bit_idx;
+	wmb();
+	q->t++;
+}
 static void record_effect_bool(const struct sock *sk, int loc, bool v){
 	#if DERAND_DEBUG
 	if (loc != 0) // loc 0 is not serializable among all events, but just within incoming packets
@@ -410,6 +446,7 @@ static void record_effect_bool(const struct sock *sk, int loc, bool v){
 static void record_skb_still_in_host_queue(const struct sock *sk, bool ret){
 	struct SkbInQueueQ *siqq = &((struct derand_recorder*)sk->recorder)->siqq;
 	siqq->v[get_siq_q_idx(siqq->t)] = ret;
+	wmb();
 	siqq->t++;
 }
 
