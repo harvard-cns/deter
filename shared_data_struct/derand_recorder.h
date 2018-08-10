@@ -92,6 +92,20 @@ struct GeneralEventQ{
 #define get_geq_idx(i) ((i) & (DERAND_GENERAL_EVENT_PER_SOCK - 1))
 #endif /* DERAND_DEBUG */
 
+/****************************************
+ * AdvancedEvent
+ ***************************************/
+#if ADVANCED_EVENT_ENABLE
+#define DERAND_ADVANCED_EVENT_PER_SOCK 16384
+struct AdvancedEventQ{
+	u32 h, t;
+	u32 v[DERAND_ADVANCED_EVENT_PER_SOCK]; // this is diff from other queues. Each u32 is either a AdvancedEvent, or a data
+};
+static inline u32 get_aeq_idx(u32 i){
+	return i & (DERAND_ADVANCED_EVENT_PER_SOCK - 1);
+}
+#endif /* ADVANCED_EVENT_ENABLE */
+
 #define DERAND_EVENT_PER_SOCK 1024
 #define DERAND_SOCKCALL_PER_SOCK 256
 
@@ -118,6 +132,9 @@ struct derand_recorder{
 	struct SkbInQueueQ siqq; // skb_still_in_host_queue
 	#if DERAND_DEBUG
 	struct GeneralEventQ geq;
+	#endif
+	#if ADVANCED_EVENT_ENABLE
+	struct AdvancedEventQ aeq;
 	#endif
 };
 

@@ -116,6 +116,9 @@ public:
 	#if DERAND_DEBUG
 	std::vector<GeneralEvent> geq;
 	#endif
+	#if ADVANCED_EVENT_ENABLE
+	std::vector<u32> aeq;
+	#endif
 
 	Records() : broken(0), recorder_id(-1) {}
 	void transform(); // transform raw data to final format

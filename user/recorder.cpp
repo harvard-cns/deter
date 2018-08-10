@@ -124,6 +124,13 @@ int main()
 					res[i].geq.push_back(rec->geq.v[get_geq_idx(j)]);
 				rec->geq.h = j;
 				#endif
+				#if ADVANCED_EVENT_ENABLE
+				res[i].broken |= (rec->aeq.h + DERAND_ADVANCED_EVENT_PER_SOCK < rec->aeq.t) << (8 + DERAND_EFFECT_BOOL_N_LOC);
+				for (j = rec->aeq.h; j < rec->aeq.t; j++){
+					res[i].aeq.push_back(rec->aeq.v[get_aeq_idx(j)]);
+				}
+				rec->aeq.h = j;
+				#endif
 
 				// if the socket's recorder has finished, do the finish job
 				// NOTE: we must use the test result before the copying. Otherwise if we test here, there may be new data after copy, which will be lost

@@ -122,6 +122,12 @@ int Records::dump(const char* filename){
 		goto fail_write;
 	#endif
 
+	#if ADVANCED_EVENT_ENABLE
+	// write aeq
+	if (!dump_vector(aeq, fout))
+		goto fail_write;
+	#endif
+
 	fclose(fout);
 	return 0;
 fail_write:
@@ -192,6 +198,12 @@ int Records::read(const char* filename){
 	#if DERAND_DEBUG
 	// read geq
 	if (!read_vector(geq, fin))
+		goto fail_read;
+	#endif
+
+	#if ADVANCED_EVENT_ENABLE
+	// read aeq
+	if (!read_vector(aeq, fin))
 		goto fail_read;
 	#endif
 
@@ -287,6 +299,27 @@ void Records::print(FILE* fout){
 			fprintf(fout, " %s", get_event_name(data, buf));
 		else
 			fprintf(fout, " %lu", data);
+		fprintf(fout, "\n");
+	}
+	#endif
+
+	#if ADVANCED_EVENT_ENABLE
+	fprintf(fout, "%lu u32 for advanced events\n", aeq.size());
+	for (int64_t i = 0; i < aeq.size(); i++){
+		AdvancedEvent *ae = (AdvancedEvent*) &aeq[i];
+		char buf[64];
+		fprintf(fout, "%ld ", i);
+		fprintf(fout, "%s[%hhu]", get_ae_name(ae->type, buf), ae->loc);
+		for (u32 j = 1 << (ae->n - 1); j; j >>= 1){
+			if (ae->fmt & j){
+				int64_t v = aeq[i+1] | ((int64_t)aeq[i+2] << 32);
+				fprintf(fout, " %ld", v);
+				i+=2;
+			}else {
+				fprintf(fout, " %d", aeq[i+1]);
+				i+=1;
+			}
+		}
 		fprintf(fout, "\n");
 	}
 	#endif
@@ -405,6 +438,9 @@ void Records::clear(){
 		ebq[i].clear();
 	#if DERAND_DEBUG
 	geq.clear();
+	#endif
+	#if ADVANCED_EVENT_ENABLE
+	aeq.clear();
 	#endif
 }
 

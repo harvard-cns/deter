@@ -4,6 +4,7 @@
 #include "tcp_sock_init_data.h"
 
 #define DERAND_DEBUG 0
+#define ADVANCED_EVENT_ENABLE 1
 
 /* Different types of socket calls' ID starts with different highest 4 bits */
 #define DERAND_SOCK_ID_BASE 100
@@ -182,5 +183,58 @@ static inline const char* get_ge_name(u32 type, char* buf){
 	}
 	return buf;
 }
+
+#if ADVANCED_EVENT_ENABLE
+struct AdvancedEvent{
+	u8 type, loc, n, fmt;
+};
+static inline u32 get_ae_hdr_u32(u32 type, u32 loc, u32 n, u32 fmt){
+	return type | (loc << 8) | (n << 16) | (fmt << 24);
+}
+static inline const char* get_ae_name(u8 type, char* buf){
+	switch (type){
+		case 0: sprintf(buf, "tcp_sendmsg");break;
+		case 1: sprintf(buf, "tcp_recvmsg");break;
+		case 2: sprintf(buf, "tcp_close");break;
+		case 3: sprintf(buf, "tcp_sndbuf_expand");break;
+		case 4: sprintf(buf, "tcp_write_xmit");break;
+		case 5: sprintf(buf, "tcp_push");break;
+		case 6: sprintf(buf, "__tcp_push_pending_frames");break;
+		case 7: sprintf(buf, "tcp_push_one");break;
+		case 8: sprintf(buf, "tcp_nagle_test");break;
+		case 9: sprintf(buf, "tcp_transmit_skb");break;
+		case 10: sprintf(buf, "sk_stream_alloc_skb");break;
+		case 11: sprintf(buf, "sk_stream_moderate_sndbuf");break;
+		case 12: sprintf(buf, "tcp_rcv_established");break;
+		case 13: sprintf(buf, "tcp_ack");break;
+		case 14: sprintf(buf, "tcp_release_cb");break;
+		case 15: sprintf(buf, "__tcp_retransmit_skb");break;
+		case 16: sprintf(buf, "tcp_retransmit_skb");break;
+		case 17: sprintf(buf, "tcp_xmit_retransmit_queue");break;
+		case 18: sprintf(buf, "inet_csk_reset_xmit_timer");break;
+		case 19: sprintf(buf, "sk_reset_timer");break;
+		case 20: sprintf(buf, "tcp_write_timer");break;
+		case 21: sprintf(buf, "tcp_write_timer_handler");break;
+		case 22: sprintf(buf, "sk_stream_memory_free");break;
+		case 23: sprintf(buf, "sk_stream_write_space");break;
+		case 24: sprintf(buf, "tcp_delack_timer");break;
+		case 25: sprintf(buf, "tcp_delack_timer_handler");break;
+		case 26: sprintf(buf, "tcp_minshall_update");break;
+		case 27: sprintf(buf, "tcp_check_space");break;
+		case 28: sprintf(buf, "tcp_new_space");break;
+		case 29: sprintf(buf, "tcp_should_expand_sndbuf");break;
+		case 30: sprintf(buf, "tcp_data_snd_check");break;
+		case 256-1: sprintf(buf, "#read_jiffies");break;
+		case 256-2: sprintf(buf, "#under_memory_pressure");break;
+		case 256-3: sprintf(buf, "#memory_allocated");break;
+		case 256-4: sprintf(buf, "#socket_allocated");break;
+		case 256-5: sprintf(buf, "#skb_mstamp");break;
+		case 256-6: sprintf(buf, "#effect_bool");break;
+		case 256-7: sprintf(buf, "#skb_still_in_host_queue");break;
+		default: sprintf(buf, "unknown"); break;
+	}
+	return buf;
+}
+#endif
 
 #endif /* _SHARED_DATA_STRUCT__BASE_STRUCT_H */
