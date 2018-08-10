@@ -454,7 +454,7 @@ static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){
 	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 4, ret);
 	#endif
 	#if ADVANCED_EVENT_ENABLE
-	record_advanced_event(sk, -4, 0, 0b00, 2, rec->n_sockets_allocated, ret); // type=-4, loc=0, fmt=0b00, data=n_sockets_allocated, ret
+	record_advanced_event(sk, -4, 0, 0b0, 1, 0); // type=-4, loc=0, fmt=0b00, data=0
 	#endif
 	rec->n_sockets_allocated++;
 }

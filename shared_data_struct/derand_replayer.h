@@ -74,6 +74,17 @@ struct GeneralEventQ{
 #define get_geq_idx(i) ((i) & (GENERAL_EVENT_Q_LEN - 1))
 #endif /* DERAND_DEBUG */
 
+#if ADVANCED_EVENT_ENABLE
+#define ADVANCED_EVENT_Q_LEN 262144
+struct AdvancedEventQ{
+	u32 h, t, i;
+	u32 v[ADVANCED_EVENT_Q_LEN];
+};
+static inline u32 get_aeq_idx(u32 i){
+	return i & (ADVANCED_EVENT_Q_LEN - 1);
+}
+#endif /* ADVANCED_EVENT_ENABLE */
+
 struct derand_replayer{
 	u32 mode; // 0: server, 1: client
 	u16 port; // the socket to replay should has this port number. Depending on mode, this is either sport (server) or dport (client)
@@ -91,6 +102,9 @@ struct derand_replayer{
 	struct SkbInQueueQ siqq; // skb_still_in_host_queue
 	#if DERAND_DEBUG
 	struct GeneralEventQ geq;
+	#endif
+	#if ADVANCED_EVENT_ENABLE
+	struct AdvancedEventQ aeq;
 	#endif
 };
 

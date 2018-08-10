@@ -305,10 +305,10 @@ void Records::print(FILE* fout){
 
 	#if ADVANCED_EVENT_ENABLE
 	fprintf(fout, "%lu u32 for advanced events\n", aeq.size());
-	for (int64_t i = 0; i < aeq.size(); i++){
+	for (int64_t i = 0, idx = 0; i < aeq.size(); i++, idx++){
 		AdvancedEvent *ae = (AdvancedEvent*) &aeq[i];
 		char buf[64];
-		fprintf(fout, "%ld ", i);
+		fprintf(fout, "%ld %ld ", idx, i);
 		fprintf(fout, "%s[%hhu]", get_ae_name(ae->type, buf), ae->loc);
 		for (u32 j = 1 << (ae->n - 1); j; j >>= 1){
 			if (ae->fmt & j){

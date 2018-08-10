@@ -26,6 +26,9 @@ public:
 	#if DERAND_DEBUG
 	int convert_general_event();
 	#endif
+	#if ADVANCED_EVENT_ENABLE
+	int convert_advanced_event();
+	#endif
 
 	/* start the server side replay */
 	int start_replay_server();

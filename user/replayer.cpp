@@ -137,6 +137,21 @@ int Replayer::convert_general_event(){
 }
 #endif /* DERAND_DEBUG */
 
+#if ADVANCED_EVENT_ENABLE
+int Replayer::convert_advanced_event(){
+	auto &s = rec.aeq;
+	if (s.size() > ADVANCED_EVENT_Q_LEN){
+		fprintf(stderr, "too many advanced events: %lu > %u\n", s.size(), ADVANCED_EVENT_Q_LEN);
+		return -1;
+	}
+	d->aeq.h = d->aeq.i = 0;
+	d->aeq.t = s.size();
+	if (s.size() > 0)
+		memcpy(d->aeq.v, &s[0], sizeof(s[0]) * s.size());
+	return 0;
+}
+#endif
+
 int Replayer::read_records(const string &record_file_name){
 	if (rec.read(record_file_name.c_str())){
 		fprintf(stderr, "cannot read file: %s\n", record_file_name.c_str());
@@ -174,6 +189,10 @@ int Replayer::read_records(const string &record_file_name){
 		return -9;
 	#if DERAND_DEBUG
 	if (convert_general_event())
+		return -11;
+	#endif
+	#if ADVANCED_EVENT_ENABLE
+	if (convert_advanced_event())
 		return -10;
 	#endif
 	return 0;
