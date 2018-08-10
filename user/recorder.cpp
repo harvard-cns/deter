@@ -119,7 +119,7 @@ int main()
 				}
 				#if DERAND_DEBUG
 				// copy GeneralEvent
-				res[i].broken |= (rec->geq.h + DERAND_GENERAL_EVENT_PER_SOCK < rec->geq.t) << (8 + DERAND_EFFECT_BOOL_N_LOC);
+				res[i].broken |= (rec->geq.h + DERAND_GENERAL_EVENT_PER_SOCK < rec->geq.t) << (9 + DERAND_EFFECT_BOOL_N_LOC);
 				for (j = rec->geq.h; j < rec->geq.t; j++)
 					res[i].geq.push_back(rec->geq.v[get_geq_idx(j)]);
 				rec->geq.h = j;
@@ -167,7 +167,7 @@ int main()
 			}
 		}
 
-		#if 1
+		#if 0
 		// check if can sleep
 		next_t += 1000;
 		uint64_t now = get_time() / 1000;
