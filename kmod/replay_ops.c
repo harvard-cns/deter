@@ -689,6 +689,17 @@ static void replay_general_event(const struct sock *sk, int loc, u64 data){
 }
 #endif
 
+static int kernel_log(const struct sock *sk, const char *fmt, ...){
+	int ret = 0;
+	va_list args;
+	if (sk->replayer == NULL)
+		return 0;
+	va_start(args, fmt);
+	ret = derand_log_va(fmt, args);
+	va_end(args);
+	return ret;
+}
+
 /****************************************
  * Packet corrector
  ***************************************/
@@ -837,6 +848,7 @@ int bind_replay_ops(void){
 	#if DERAND_DEBUG
 	derand_record_ops.general_event = replay_general_event;
 	#endif
+	derand_record_ops.log = kernel_log;
 	derand_replay_effect_bool = replay_effect_bool;
 
 	/* The recorder_create functions must be bind last, because they are the enabler of record */
