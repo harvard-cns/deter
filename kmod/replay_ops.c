@@ -655,15 +655,15 @@ static unsigned long replay_tcp_time_stamp(const struct sock *sk, int id){
 static bool replay_tcp_under_memory_pressure(const struct sock *sk){
 	struct memory_pressure_q *mpq = &((struct derand_replayer*)sk->replayer)->mpq;
 	bool ret;
-	#if ADVANCED_EVENT_ENABLE
-	replay_advanced_event(sk, -2, 0, 0b0, 1, mpq->h);
-	#endif
 	if ((ret = (mpq->h < mpq->t && mpq->v[get_mp_q_idx(mpq->h)] == mpq->seq)))
 		mpq->h++;
 	mpq->seq++;
 	#if DERAND_DEBUG
 	// check general event sequence
 	check_geq(sk, 2, ret);
+	#endif
+	#if ADVANCED_EVENT_ENABLE
+	replay_advanced_event(sk, -2, 0, 0b0, 1, (int)ret);
 	#endif
 	return ret;
 }

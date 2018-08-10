@@ -407,7 +407,7 @@ static void record_tcp_under_memory_pressure(const struct sock *sk, bool ret){
 	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 2, ret);
 	#endif
 	#if ADVANCED_EVENT_ENABLE
-	record_advanced_event(sk, -2, 0, 0b0, 1, ((struct derand_recorder*)(sk->recorder))->mpq.t); // mpq: type=-2, loc=0, fmt=0, data=mpq.t
+	record_advanced_event(sk, -2, 0, 0b0, 1, (int)ret); // mpq: type=-2, loc=0, fmt=0, data=ret
 	#endif
 	push_memory_pressure_q(&((struct derand_recorder*)(sk->recorder))->mpq, ret);
 }
@@ -417,7 +417,7 @@ static void record_sk_under_memory_pressure(const struct sock *sk, bool ret){
 	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 2, ret);
 	#endif
 	#if ADVANCED_EVENT_ENABLE
-	record_advanced_event(sk, -2, 0, 0b0, 1, ((struct derand_recorder*)(sk->recorder))->mpq.t); // mpq: type=-2, loc=0, fmt=0, data=mpq.t
+	record_advanced_event(sk, -2, 0, 0b0, 1, (int)ret); // mpq: type=-2, loc=0, fmt=0, data=ret
 	#endif
 	push_memory_pressure_q(&((struct derand_recorder*)(sk->recorder))->mpq, ret);
 }
