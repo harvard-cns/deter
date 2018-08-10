@@ -520,23 +520,26 @@ static inline void replay_advanced_event(const struct sock *sk, u8 type, u8 loc,
 		// print data if mismatch
 		if (mismatch || data_mismatch){
 			va_start(vl, n);
-			for (i = 1, j = 1 << (n - 1); j; j >>= 1){
+			for (j = 1 << (n - 1); j; j >>= 1){
 				if (fmt & j){
 					long a = va_arg(vl, long);
-					str_write(s, " !%ld", a);
-					i+=2;
+					str_write(s, " %ld", a);
 				}else {
 					u32 a = va_arg(vl, u32);
-					str_write(s, " !%u", a);
-					i+=1;
+					str_write(s, " %u", a);
 				}
 			}
 			va_end(vl);
 			derand_log("%s\n", buf);
 
-			// mismatch means we did not go through this ae in the previous test, so we did not update h there. so we update here
-			if (mismatch)
-				r->aeq.h += i;
+		}
+
+		// mismatch means we did not go through this ae in the previous test, so we did not update h there. so we update here
+		if (mismatch){
+			int add = 1 + ae->n;
+			for (j = 1 << (ae->n - 1); j; j >>= 1)
+				add += !!(ae->fmt & j);
+			r->aeq.h += add;
 		}
 
 		// update aeq->i
