@@ -336,6 +336,18 @@ static u32 new_close(struct sock *sk, long timeout){
 	return sc_id;
 }
 
+static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *optval, unsigned int optlen){
+	struct derand_replayer *r = sk->replayer;
+	int sc_id;
+	if (!r)
+		return 0;
+
+	// get sockcall ID
+	sc_id = atomic_add_return(1, &r->sockcall_id) - 1;
+	derand_log("a new setsockopt, assign id %d\n", sc_id);
+	return sc_id;
+}
+
 /**************************************
  * hooks before lock
  *************************************/
@@ -916,6 +928,7 @@ int bind_replay_ops(void){
 	//derand_record_ops.new_sendpage = new_sendpage;
 	derand_record_ops.new_recvmsg = new_recvmsg;
 	derand_record_ops.new_close = new_close;
+	derand_record_ops.new_setsockopt = new_setsockopt;
 	derand_record_ops.sockcall_lock = sockcall_lock;
 	derand_record_ops.incoming_pkt = incoming_pkt;
 	derand_record_ops.write_timer = write_timer;
