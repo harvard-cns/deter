@@ -81,6 +81,9 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	printk("[recorder_create] sport = %hu, dport = %hu, succeed to create recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, record_ctrl.top);
 	sk->recorder = rec;
 
+	// set broken to 0;
+	rec->broken = 0;
+
 	// record 4 tuples
 	rec->sip = inet_sk(sk)->inet_saddr;
 	rec->dip = inet_sk(sk)->inet_daddr;
@@ -284,6 +287,32 @@ static u32 new_close(struct sock *sk, long timeout){
 	rec_sc->type = DERAND_SOCKCALL_TYPE_CLOSE;
 	rec_sc->close.timeout = timeout;
 	rec_sc->thread_id = (u64)current;
+	// return sockcall ID
+	return sc_id;
+}
+
+static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *optval, unsigned int optlen){
+	struct derand_recorder* rec = sk->recorder;
+	struct derand_rec_sockcall *rec_sc;
+	int sc_id;
+
+	if (!rec)
+		return 0;
+	// get sockcall ID
+	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
+	// get record for storing this sockcall
+	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
+	// store data for this sockcall
+	rec_sc->type = DERAND_SOCKCALL_TYPE_SETSOCKOPT;
+	if ((u32)level > 255 || (u32)optname > 255 || (u32)optlen > 12){ // use u32 so that negative values are also considered
+		rec_sc->setsockopt.level = rec_sc->setsockopt.optname = rec_sc->setsockopt.optlen = 255;
+		rec->broken |= BROKEN_UNSUPPORTED_SOCKOPT;
+	}else {
+		rec_sc->setsockopt.level = level;
+		rec_sc->setsockopt.optname = optname;
+		rec_sc->setsockopt.optlen = optlen;
+		copy_from_user(rec_sc->setsockopt.optval, optval, optlen);
+	}
 	// return sockcall ID
 	return sc_id;
 }
@@ -517,6 +546,7 @@ int bind_record_ops(void){
 	derand_record_ops.new_recvmsg = new_recvmsg;
 	derand_record_ops.new_splice_read = new_splice_read;
 	derand_record_ops.new_close = new_close;
+	derand_record_ops.new_setsockopt = new_setsockopt;
 	derand_record_ops.sockcall_lock = sockcall_lock;
 	derand_record_ops.incoming_pkt = incoming_pkt;
 	derand_record_ops.write_timer = write_timer;

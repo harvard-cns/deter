@@ -229,6 +229,14 @@ void Records::print(FILE* fout){
 			fprintf(fout, "close: %ld thread %lu\n", sc.close.timeout, sc.thread_id);
 		}else if (sc.type == DERAND_SOCKCALL_TYPE_SPLICE_READ){
 			fprintf(fout, "splice_read: 0x%x %lu thread %lu\n", sc.splice_read.flags, sc.splice_read.size, sc.thread_id);
+		}else if (sc.type == DERAND_SOCKCALL_TYPE_SETSOCKOPT){
+			if (valid_rec_setsockopt(&sc.setsockopt)){
+				fprintf(fout, "setsockopt: %hhu %hhu %hhu ", sc.setsockopt.level, sc.setsockopt.optname, sc.setsockopt.optlen);
+				for (int j = 0; j < sc.setsockopt.optlen; j++)
+					fprintf(fout, " %hhx", sc.setsockopt.optval[j]);
+				fprintf(fout, "\n");
+			}else 
+				fprintf(fout, "Error: unsupported setsockopt\n");
 		}
 	}
 	fprintf(fout, "%lu events\n", evts.size());
@@ -465,6 +473,16 @@ uint64_t get_sockcall_key(derand_rec_sockcall &sc){
 		key |= sc.splice_read.flags;
 		key <<= 30;
 		key |= sc.splice_read.size & ((1<<30)-1);
+	}else if (sc.type == DERAND_SOCKCALL_TYPE_SETSOCKOPT){
+		key <<= 8;
+		key |= sc.setsockopt.level;
+		key <<= 8;
+		key |= sc.setsockopt.optname;
+		key <<= 8;
+		key |= sc.setsockopt.optlen;
+		key <<= 32;
+		for (int j = 0; j < sc.setsockopt.optlen && j < 4; j++)
+			key |= sc.setsockopt.optval[j] << (j*8);
 	}
 	return key;
 }
@@ -531,7 +549,9 @@ void Records::print_compressed_storage_size(){
 		// assign a unique id to each unique flag
 		map<int,int> flag_id;
 		for (int i = 0; i < sockcalls.size(); i++){
-			if (sockcalls[i].type != DERAND_SOCKCALL_TYPE_CLOSE && flag_id.find(sockcalls[i].sendmsg.flags) == flag_id.end()){
+			if (sockcalls[i].type != DERAND_SOCKCALL_TYPE_CLOSE 
+				&& sockcalls[i].type != DERAND_SOCKCALL_TYPE_SETSOCKOPT
+				&& flag_id.find(sockcalls[i].sendmsg.flags) == flag_id.end()){
 				uint64_t id = flag_id.size();
 				flag_id[sockcalls[i].sendmsg.flags] = id;
 			}

@@ -32,6 +32,17 @@ struct derand_rec_sockcall_tcp_splice_read{
 	int flags;
 	size_t size;
 };
+#define DERAND_SOCKCALL_TYPE_SETSOCKOPT 4
+struct derand_rec_sockcall_setsockopt{
+	u8 type;
+	u8 level;
+	u8 optname;
+	u8 optlen;
+	u8 optval[12];
+};
+static inline bool valid_rec_setsockopt(struct derand_rec_sockcall_setsockopt *sc){
+	return sc->level < 255 || sc->optname < 255 || sc->optlen <= 12;
+}
 
 struct derand_rec_sockcall{
 	union{
@@ -40,6 +51,7 @@ struct derand_rec_sockcall{
 		struct derand_rec_sockcall_tcp_recvmsg recvmsg;
 		struct derand_rec_sockcall_tcp_close close;
 		struct derand_rec_sockcall_tcp_splice_read splice_read;
+		struct derand_rec_sockcall_setsockopt setsockopt;
 	};
 	u64 thread_id;
 };
@@ -56,6 +68,9 @@ static inline const char* get_sockcall_str(struct derand_rec_sockcall *sc, char*
 			break;
 		case DERAND_SOCKCALL_TYPE_SPLICE_READ:
 			sprintf(buf, "splice_read");
+			break;
+		case DERAND_SOCKCALL_TYPE_SETSOCKOPT:
+			sprintf(buf, "setsockopt");
 			break;
 		default:
 			sprintf(buf, "unknown sockcall type %u", sc->type);

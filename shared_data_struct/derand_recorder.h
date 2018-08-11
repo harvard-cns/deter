@@ -110,6 +110,7 @@ static inline u32 get_aeq_idx(u32 i){
 #define DERAND_SOCKCALL_PER_SOCK 256
 
 struct derand_recorder{
+	u32 broken;
 	u32 mode;
 	u32 sip, dip;
 	u16 sport, dport;
@@ -140,5 +141,17 @@ struct derand_recorder{
 
 #define get_sc_q_idx(i) ((i) & (DERAND_SOCKCALL_PER_SOCK - 1))
 #define get_evt_q_idx(i) ((i) & (DERAND_EVENT_PER_SOCK - 1))
+
+#define BROKEN_EVENT (1 << 0)
+#define BROKEN_SOCKCALL (1 << 1)
+#define BROKEN_DPQ (1 << 2)
+#define BROKEN_JFQ (1 << 3)
+#define BROKEN_MPQ (1 << 4)
+#define BROKEN_MAQ (1 << 5)
+#define BROKEN_MSQ (1 << 6)
+#define BROKEN_SIQQ (1 << 7)
+#define BROKEN_EBQ(i) (1 << (8 + (i)))
+#define BROKEN_AEQ (1 << (8 + DERAND_EFFECT_BOOL_N_LOC))
+#define BROKEN_UNSUPPORTED_SOCKOPT (1 << (10 + DERAND_EFFECT_BOOL_N_LOC))
 
 #endif /* _SHARED_DATA_STRUCT__DERAND_RECORDER_H */

@@ -135,6 +135,7 @@ int main()
 				// if the socket's recorder has finished, do the finish job
 				// NOTE: we must use the test result before the copying. Otherwise if we test here, there may be new data after copy, which will be lost
 				if (finished){
+					res[i].broken |= rec->broken;
 					// record the last idx_delta for jiffies
 					if (rec->jf.idx_delta > 0){
 						jiffies_rec jf_rec;

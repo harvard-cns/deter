@@ -54,8 +54,8 @@ int main(){
 				if ((cnt & 0x0fffffff) == 0)
 					printf("waiting for ready of entry[%u]\n", get_logger_idx(logger->h));
 			}
-			//fprintf(stdout, "[%u %u] %s", logger->h, logger->t.counter, logger->buf[get_logger_idx(logger->h)] + 1);
-			logs.push_back((char*)logger->buf[get_logger_idx(logger->h)] + 1);
+			fprintf(stdout, "[%u %u] %s", logger->h, logger->t.counter, logger->buf[get_logger_idx(logger->h)] + 1);
+			//logs.push_back((char*)logger->buf[get_logger_idx(logger->h)] + 1);
 			ready = 0; // clear ready byte
 			logger->h++;
 		}

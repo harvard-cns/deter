@@ -259,7 +259,8 @@ void do_sockcall(int sockfd, derand_rec_sockcall sc, int id){
 		recv(sockfd, &buf[0], sc.recvmsg.size, sc.recvmsg.flags);
 	} else if (sc.type == DERAND_SOCKCALL_TYPE_CLOSE){
 		close(sockfd);
-	} else {
+	} else if (sc.type == DERAND_SOCKCALL_TYPE_SETSOCKOPT){
+		setsockopt(sockfd, sc.setsockopt.level, sc.setsockopt.optname, sc.setsockopt.optval, sc.setsockopt.optlen);
 	}
 	printf("sockcall %d finishes\n", id);
 }
