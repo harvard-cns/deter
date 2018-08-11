@@ -420,6 +420,19 @@ void Records::print_init_data(FILE* fout){
 	fprintf(fout, "icsk_mtup.search_low = %d\n", d->icsk_mtup.search_low);
 	fprintf(fout, "icsk_mtup.probe_size = %d\n", d->icsk_mtup.probe_size);
 	fprintf(fout, "icsk_mtup.probe_timestamp = %u\n", d->icsk_mtup.probe_timestamp);
+
+	fprintf(fout, "mc_ttl = %hhu\n", d->mc_ttl);
+	fprintf(fout, "recverr = %hhu\n", d->recverr);
+	fprintf(fout, "is_icsk = %hhu\n", d->is_icsk);
+	fprintf(fout, "freebind = %hhu\n", d->freebind);
+	fprintf(fout, "hdrincl = %hhu\n", d->hdrincl);
+	fprintf(fout, "mc_loop = %hhu\n", d->mc_loop);
+	fprintf(fout, "transparent = %hhu\n", d->transparent);
+	fprintf(fout, "mc_all = %hhu\n", d->mc_all);
+	fprintf(fout, "nodefrag = %hhu\n", d->nodefrag);
+	fprintf(fout, "mc_index = %d\n", d->mc_index);
+
+	fprintf(fout, "skc_family = %hu\n", d->skc_family);
 	fprintf(fout, "skc_reuse = %hhu\n", d->skc_reuse);
 	fprintf(fout, "skc_reuseport = %hhu\n", d->skc_reuseport);
 	fprintf(fout, "skc_flags = %lu\n", d->skc_flags);
@@ -435,6 +448,7 @@ void Records::print_init_data(FILE* fout){
 	fprintf(fout, "sk_route_nocaps = %lu\n", d->sk_route_nocaps);
 	fprintf(fout, "sk_rcvlowat = %d\n", d->sk_rcvlowat);
 	fprintf(fout, "sk_lingertime = %lu\n", d->sk_lingertime);
+	fprintf(fout, "sk_max_ack_backlog = %u\n", d->sk_max_ack_backlog);
 	fprintf(fout, "sk_priority = %u\n", d->sk_priority);
 	fprintf(fout, "sk_rcvtimeo = %ld\n", d->sk_rcvtimeo);
 	fprintf(fout, "sk_sndtimeo = %ld\n", d->sk_sndtimeo);

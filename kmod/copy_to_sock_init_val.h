@@ -5,6 +5,7 @@
 #include "derand_replayer.h"
 
 static inline void copy_to_sock(struct sock *sk){
+	struct inet_sock *isk = inet_sk(sk);
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct tcp_sock_init_data *d = &((struct derand_replayer*)sk->replayer)->init_data;
@@ -63,7 +64,19 @@ static inline void copy_to_sock(struct sock *sk){
 	icsk->icsk_rto = d->icsk_rto;
 	memcpy(&icsk->icsk_ack, &d->icsk_ack, sizeof(d->icsk_ack));
 	memcpy(&icsk->icsk_mtup, &d->icsk_mtup, sizeof(d->icsk_mtup));
+
+	isk->mc_ttl = d->mc_ttl;
+	isk->recverr = d->recverr;
+	isk->is_icsk = d->is_icsk;
+	isk->freebind = d->freebind;
+	isk->hdrincl = d->hdrincl;
+	isk->mc_loop = d->mc_loop;
+	isk->transparent = d->transparent;
+	isk->mc_all = d->mc_all;
+	isk->nodefrag = d->nodefrag;
+	isk->mc_index = d->mc_index;
 	
+	sk->sk_family = d->skc_family;
 	sk->sk_reuse = d->skc_reuse;
 	sk->sk_reuseport = d->skc_reuseport;
 	sk->sk_flags = d->skc_flags;
@@ -79,6 +92,7 @@ static inline void copy_to_sock(struct sock *sk){
 	sk->sk_route_nocaps = d->sk_route_nocaps;
 	sk->sk_rcvlowat = d->sk_rcvlowat;
 	sk->sk_lingertime = d->sk_lingertime;
+	sk->sk_max_ack_backlog = d->sk_max_ack_backlog;
 	sk->sk_priority = d->sk_priority;
 	sk->sk_rcvtimeo = d->sk_rcvtimeo;
 	sk->sk_sndtimeo = d->sk_sndtimeo;

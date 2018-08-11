@@ -117,6 +117,20 @@ struct tcp_sock_init_data{
 		u32		  probe_timestamp;
 	} icsk_mtup;
 
+	/* inet_sock */
+	__u8			mc_ttl;
+	__u8			recverr:1,
+				is_icsk:1,
+				freebind:1,
+				hdrincl:1,
+				mc_loop:1,
+				transparent:1,
+				mc_all:1,
+				nodefrag:1;
+	int			mc_index;
+
+	/* sock */
+	unsigned short		skc_family;
 	unsigned char		skc_reuse:4;
 	unsigned char		skc_reuseport:1;
 	unsigned long skc_flags; // cannot name sk_flags because sk_flags is defined as a MACRO in sock.h
@@ -132,6 +146,7 @@ struct tcp_sock_init_data{
 	u64 sk_route_nocaps;
 	int			sk_rcvlowat;
 	unsigned long	        sk_lingertime;
+	u32			sk_max_ack_backlog;
 	__u32			sk_priority;
 	long			sk_rcvtimeo;
 	long			sk_sndtimeo;

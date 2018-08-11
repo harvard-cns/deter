@@ -167,7 +167,7 @@ int main()
 						res[i].ebq[k].n = ebq.t;
 					}
 
-					printf("%u %d fin:%u %s\n", rec->evt_t, rec->sockcall_id.counter, rec->pkt_idx.fin_seq, res[i].broken? "broken":"ok");
+					printf("%u %d fin:%u %s init_ipid %u last_ipid %u #drop %lu\n", rec->evt_t, rec->sockcall_id.counter, rec->pkt_idx.fin_seq, res[i].broken? "broken":"ok", rec->pkt_idx.init_ipid, rec->pkt_idx.last_ipid, res[i].dpq.size());
 					res[i].dump();
 					res[i].clear();
 					res[i].recorder_id++;

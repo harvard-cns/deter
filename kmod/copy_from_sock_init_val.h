@@ -5,6 +5,7 @@
 #include "derand_recorder.h"
 
 static inline void copy_from_server_sock(struct sock *sk){
+	struct inet_sock *isk = inet_sk(sk);
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct tcp_sock_init_data *d = &((struct derand_recorder*)sk->recorder)->init_data;
@@ -63,7 +64,19 @@ static inline void copy_from_server_sock(struct sock *sk){
 	d->icsk_rto = icsk->icsk_rto;
 	memcpy(&d->icsk_ack, &icsk->icsk_ack, sizeof(d->icsk_ack));
 	memcpy(&d->icsk_mtup, &icsk->icsk_mtup, sizeof(d->icsk_mtup));
+
+	d->mc_ttl = isk->mc_ttl;
+	d->recverr = isk->recverr;
+	d->is_icsk = isk->is_icsk;
+	d->freebind = isk->freebind;
+	d->hdrincl = isk->hdrincl;
+	d->mc_loop = isk->mc_loop;
+	d->transparent = isk->transparent;
+	d->mc_all = isk->mc_all;
+	d->nodefrag = isk->nodefrag;
+	d->mc_index = isk->mc_index;
 	
+	d->skc_family = sk->sk_family;
 	d->skc_reuse = sk->sk_reuse;
 	d->skc_reuseport = sk->sk_reuseport;
 	d->skc_flags = sk->sk_flags;
@@ -79,6 +92,7 @@ static inline void copy_from_server_sock(struct sock *sk){
 	d->sk_route_nocaps = sk->sk_route_nocaps;
 	d->sk_rcvlowat = sk->sk_rcvlowat;
 	d->sk_lingertime = sk->sk_lingertime;
+	d->sk_max_ack_backlog = sk->sk_max_ack_backlog;
 	d->sk_priority = sk->sk_priority;
 	d->sk_rcvtimeo = sk->sk_rcvtimeo;
 	d->sk_sndtimeo = sk->sk_sndtimeo;
@@ -87,7 +101,7 @@ static inline void copy_from_server_sock(struct sock *sk){
 	d->sk_mark = sk->sk_mark;
 
 	/* print */
-	#if 0
+	#if 1
 	int i = 0;
 	struct inet_sock *inetsk = inet_sk(sk);
 	printk("sk->sk_refcnt=%d\n", sk->sk_refcnt.counter);
