@@ -75,7 +75,7 @@ int main()
 				rec->evt_h = j;
 				// copy sockcalls
 				res[i].broken |= (rec->sc_h + DERAND_SOCKCALL_PER_SOCK < rec->sc_t) << 1;
-				for (j = rec->sc_h; j < rec->sockcall_id.counter; j++)
+				for (j = rec->sc_h; j < rec->sc_t; j++)
 					res[i].sockcalls.push_back(rec->sockcalls[get_sc_q_idx(j)]);
 				rec->sc_h = j;
 				// copy drop

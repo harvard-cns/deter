@@ -155,6 +155,7 @@ static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 	}
 }
 
+/* this function should be called in thread_safe environment */
 static inline void new_event(struct sock *sk, u32 type){
 	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
 	u32 seq;
@@ -200,6 +201,20 @@ static void recorder_destruct(struct sock *sk){
 	printk("[recorder_destruct] sport = %hu, dport = %hu, succeed to destruct a recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, record_ctrl.top);
 }
 
+/******************************************
+ * sockcall
+ *****************************************/
+static inline void update_sc_t(struct derand_recorder *rec, int sc_id){
+	// make sure sockcall data is written, before we inc sc_t
+	wmb();
+	if (rec->sc_t != sc_id){
+		// This means there are other concurrent sockcall getting sc_id, and get a smaller sc_id than this
+		// We should wait for them to inc sc_t, before we inc sc_t. Otherwise the user recorder may record incomplete data for other sockcalls
+		volatile u32 *sc_t = &rec->sc_t;
+		while (*sc_t != sc_id);
+	}
+	rec->sc_t++;
+}
 static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	struct derand_recorder* rec = sk->recorder;
 	struct derand_rec_sockcall *rec_sc;
@@ -211,12 +226,14 @@ static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	// get sockcall ID
 	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
 	// get record for storing this sockcall
-	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
+	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)]; // we have to store it at idx sc_id, not sc_t: because 2 sockcall may be concurrent, so sc_t may not = sc_id
 	// store data for this sockcall
 	rec_sc->type = DERAND_SOCKCALL_TYPE_SENDMSG;
 	rec_sc->sendmsg.flags = msg->msg_flags;
 	rec_sc->sendmsg.size = size;
 	rec_sc->thread_id = (u64)current;
+	// update sc_t
+	update_sc_t(rec, sc_id);
 	// return sockcall ID 
 	return sc_id;
 }
@@ -248,6 +265,8 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 	rec_sc->recvmsg.flags = nonblock | flags;
 	rec_sc->recvmsg.size = len;
 	rec_sc->thread_id = (u64)current;
+	// update sc_t
+	update_sc_t(rec, sc_id);
 	// return sockcall ID
 	return sc_id;
 }
@@ -268,6 +287,8 @@ static u32 new_splice_read(struct sock *sk, size_t len, unsigned int flags){
 	rec_sc->splice_read.flags = flags;
 	rec_sc->splice_read.size = len;
 	rec_sc->thread_id = (u64)current;
+	// update sc_t
+	update_sc_t(rec, sc_id);
 	// return sockcall ID
 	return sc_id;
 }
@@ -287,6 +308,8 @@ static u32 new_close(struct sock *sk, long timeout){
 	rec_sc->type = DERAND_SOCKCALL_TYPE_CLOSE;
 	rec_sc->close.timeout = timeout;
 	rec_sc->thread_id = (u64)current;
+	// update sc_t
+	update_sc_t(rec, sc_id);
 	// return sockcall ID
 	return sc_id;
 }
@@ -313,10 +336,16 @@ static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *
 		rec_sc->setsockopt.optlen = optlen;
 		copy_from_user(rec_sc->setsockopt.optval, optval, optlen);
 	}
+	// update sc_t
+	update_sc_t(rec, sc_id);
 	// return sockcall ID
 	return sc_id;
 }
 
+/****************************************
+ * events
+ * These hooks are called right after getting the spin-lock
+ ***************************************/
 static void sockcall_lock(struct sock *sk, u32 sc_id){
 	new_event(sk, sc_id + DERAND_SOCK_ID_BASE);
 }
@@ -344,6 +373,9 @@ static void tasklet(struct sock *sk){
 	new_event(sk, EVENT_TYPE_TASKLET);
 }
 
+/********************************************
+ * monitor network action: drop & ecn
+ *******************************************/
 void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
 	u16 ipid, gap;
@@ -385,6 +417,9 @@ void record_fin_seq(struct sock *sk){
 	rec->pkt_idx.fin_v64 = tcp_sk(sk)->write_seq | (0x100000000);
 }
 
+/***********************************************
+ * shared variables
+ **********************************************/
 static void _read_jiffies(const struct sock *sk, unsigned long v, int id){
 	struct derand_recorder* rec = sk->recorder;
 	struct jiffies_q *jf;
