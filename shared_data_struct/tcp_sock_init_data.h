@@ -33,6 +33,18 @@ struct tcp_sock_init_data{
 		u8 reord;    /* reordering detected */
 	} rack;
 	u16	advmss;		/* Advertised MSS			*/
+	u8	nonagle     : 4,/* Disable Nagle algorithm?             */
+		thin_lto    : 1,/* Use linear timeouts for thin streams */
+		thin_dupack : 1,/* Fast retransmit on first dupack      */
+		repair      : 1,
+		frto        : 1;/* F-RTO (RFC5682) activated in CA_Loss */
+	u8	do_early_retrans:1,/* Enable RFC5827 early-retransmit  */
+		syn_data:1,	/* SYN includes data */
+		syn_fastopen:1,	/* SYN includes Fast Open option */
+		syn_fastopen_exp:1,/* SYN includes Fast Open exp. option */
+		syn_data_acked:1,/* data in SYN is acked by SYN-ACK */
+		save_syn:1,	/* Save headers of SYN packet */
+		is_cwnd_limited:1;/* forward progress limited by snd_cwnd? */
 /* RTT measurement */
 	u32	srtt_us;	/* smoothed round trip time << 3 in usecs */
 	u32	mdev_us;	/* medium deviation			*/

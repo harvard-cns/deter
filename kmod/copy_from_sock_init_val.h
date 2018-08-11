@@ -28,6 +28,18 @@ static inline void copy_from_server_sock(struct sock *sk){
 	d->rcv_ssthresh = tp->rcv_ssthresh;
 	memcpy(&d->rack, &tp->rack, sizeof(d->rack));
 	d->advmss = tp->advmss;
+	d->nonagle = tp->nonagle;
+	d->thin_lto = tp->thin_lto;
+	d->thin_dupack = tp->thin_dupack;
+	d->repair = tp->repair;
+	d->frto = tp->frto;
+	d->do_early_retrans = tp->do_early_retrans;
+	d->syn_data = tp->syn_data;
+	d->syn_fastopen = tp->syn_fastopen;
+	d->syn_fastopen_exp = tp->syn_fastopen_exp;
+	d->syn_data_acked = tp->syn_data_acked;
+	d->save_syn = tp->save_syn;
+	d->is_cwnd_limited = tp->is_cwnd_limited;
 	d->srtt_us = tp->srtt_us;
 	d->mdev_us = tp->mdev_us;
 	d->mdev_max_us = tp->mdev_max_us;
