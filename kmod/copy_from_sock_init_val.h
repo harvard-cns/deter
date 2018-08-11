@@ -101,7 +101,7 @@ static inline void copy_from_server_sock(struct sock *sk){
 	d->sk_mark = sk->sk_mark;
 
 	/* print */
-	#if 1
+	#if 0
 	int i = 0;
 	struct inet_sock *inetsk = inet_sk(sk);
 	printk("sk->sk_refcnt=%d\n", sk->sk_refcnt.counter);
