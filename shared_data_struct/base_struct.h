@@ -163,7 +163,7 @@ union memory_allocated_rec{
 	};
 };
 
-#define DERAND_EFFECT_BOOL_N_LOC 16
+#define DERAND_EFFECT_BOOL_N_LOC 17
 
 /* struct general event (for debug): including locking and reading */
 struct GeneralEvent{
