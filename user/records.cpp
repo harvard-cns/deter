@@ -67,6 +67,10 @@ int Records::dump(const char* filename){
 	if (!fwrite(&broken, sizeof(broken), 1, fout))
 		goto fail_write;
 
+	// write alert
+	if (!fwrite(&alert, sizeof(alert), 1, fout))
+		goto fail_write;
+
 	// write 4 tuples
 	if (!fwrite(&sip, sizeof(sip)+sizeof(dip)+sizeof(sport)+sizeof(dport), 1, fout))
 		goto fail_write;
@@ -146,6 +150,10 @@ int Records::read(const char* filename){
 	if (!fread(&broken, sizeof(broken), 1, fin))
 		goto fail_read;
 
+	// read alert
+	if (!fread(&alert, sizeof(alert), 1, fin))
+		goto fail_read;
+
 	// read 4 tuples
 	if (!fread(&sip, sizeof(sip)+sizeof(dip)+sizeof(sport)+sizeof(dport), 1, fin))
 		goto fail_read;
@@ -216,6 +224,7 @@ fail_read:
 
 void Records::print(FILE* fout){
 	fprintf(fout, "broken: %x\n", broken);
+	fprintf(fout, "alert: %x\n", alert);
 	fprintf(fout, "mode: %u\n", mode);
 	fprintf(fout, "%08x:%hu %08x:%hu\n", sip, sport, dip, dport);
 	fprintf(fout, "%lu sockcalls\n", sockcalls.size());
@@ -460,6 +469,7 @@ void Records::print_init_data(FILE* fout){
 void Records::clear(){
 	mode = 0;
 	broken = 0;
+	alert = 0;
 	evts.clear();
 	sockcalls.clear();
 	jiffies.clear();

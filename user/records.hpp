@@ -98,7 +98,7 @@ struct BitArray{
 
 class Records{
 public:
-	uint32_t mode, broken;
+	uint32_t mode, broken, alert;
 	uint32_t recorder_id;
 	uint32_t sip, dip;
 	uint16_t sport, dport;
@@ -120,7 +120,7 @@ public:
 	std::vector<u32> aeq;
 	#endif
 
-	Records() : broken(0), recorder_id(-1) {}
+	Records() : broken(0), alert(0), recorder_id(-1) {}
 	void transform(); // transform raw data to final format
 	int dump(const char* filename = NULL);
 	int read(const char* filename);

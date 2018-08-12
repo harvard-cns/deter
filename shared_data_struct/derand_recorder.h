@@ -110,7 +110,7 @@ static inline u32 get_aeq_idx(u32 i){
 #define DERAND_SOCKCALL_PER_SOCK 256
 
 struct derand_recorder{
-	u32 broken;
+	u32 broken, alert;
 	u32 mode;
 	u32 sip, dip;
 	u16 sport, dport;

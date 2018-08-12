@@ -83,6 +83,7 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 
 	// set broken to 0;
 	rec->broken = 0;
+	rec->alert = 0;
 
 	// record 4 tuples
 	rec->sip = inet_sk(sk)->inet_saddr;
@@ -578,6 +579,15 @@ static void record_general_event(const struct sock *sk, int loc, u64 data){
 }
 #endif
 
+/******************************
+ * alert
+ *****************************/
+static void record_alert(const struct sock *sk, int loc){
+	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
+	if (rec)
+		rec->alert |= 1 << loc;
+}
+
 int bind_record_ops(void){
 	derand_record_ops.recorder_destruct = recorder_destruct;
 	derand_record_ops.new_sendmsg = new_sendmsg;
@@ -609,6 +619,7 @@ int bind_record_ops(void){
 	advanced_event = record_advanced_event;
 	#endif
 	derand_record_effect_bool = record_effect_bool;
+	derand_record_alert = record_alert;
 
 	/* The recorder_create functions must be bind last, because they are the enabler of record */
 	derand_record_ops.server_recorder_create = server_recorder_create;
@@ -617,6 +628,7 @@ int bind_record_ops(void){
 }
 void unbind_record_ops(void){
 	derand_record_effect_bool = NULL;
+	derand_record_alert = NULL;
 	#if ADVANCED_EVENT_ENABLE
 	advanced_event = NULL;
 	#endif

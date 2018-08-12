@@ -136,6 +136,7 @@ int main()
 				// NOTE: we must use the test result before the copying. Otherwise if we test here, there may be new data after copy, which will be lost
 				if (finished){
 					res[i].broken |= rec->broken;
+					res[i].alert = rec->alert;
 					// record the last idx_delta for jiffies
 					if (rec->jf.idx_delta > 0){
 						jiffies_rec jf_rec;
@@ -167,7 +168,9 @@ int main()
 						res[i].ebq[k].n = ebq.t;
 					}
 
-					printf("%u %d fin:%u %s init_ipid %u last_ipid %u #drop %lu\n", rec->evt_t, rec->sockcall_id.counter, rec->pkt_idx.fin_seq, res[i].broken? "broken":"ok", rec->pkt_idx.init_ipid, rec->pkt_idx.last_ipid, res[i].dpq.size());
+					if (res[i].alert)
+						printf("Alert %x!!! ", res[i].alert);
+					printf("%u %d fin:%u %s #drop %lu\n", rec->evt_t, rec->sockcall_id.counter, rec->pkt_idx.fin_seq, res[i].broken? "broken":"ok", res[i].dpq.size());
 					res[i].dump();
 					res[i].clear();
 					res[i].recorder_id++;
