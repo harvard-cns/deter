@@ -122,6 +122,7 @@ public:
 
 	Records() : broken(0), alert(0), recorder_id(-1) {}
 	void transform(); // transform raw data to final format
+	void order_sockcalls(); // order sockcalls according to their first appearance in evts
 	int dump(const char* filename = NULL);
 	int read(const char* filename);
 	void print(FILE* fout = stdout);

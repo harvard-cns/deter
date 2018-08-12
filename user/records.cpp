@@ -41,8 +41,33 @@ void Records::transform(){
 			sockcalls[i].thread_id = ids[key];
 		}
 	}
+	// order sockcalls according to their first appearance in evts
+	order_sockcalls();
 	// transform mpq
 	mpq.transform_to_idx_one();
+}
+
+void Records::order_sockcalls(){
+	unordered_map<u32, u32> idx_mapping;
+	vector<derand_rec_sockcall> old_sockcalls = sockcalls;
+	for (uint64_t i = 0; i < evts.size(); i++){
+		derand_event &e = evts[i];
+		if (e.type >= DERAND_SOCK_ID_BASE){
+			u32 idx = get_sockcall_idx(e.type);
+			if (idx_mapping.find(idx) == idx_mapping.end()){
+				u32 new_idx = idx_mapping.size();
+				idx_mapping[idx] = new_idx;
+				sockcalls[new_idx] = old_sockcalls[idx];
+			}
+		}
+	}
+	for (uint64_t i = 0; i < evts.size(); i++){
+		derand_event &e = evts[i];
+		if (e.type >= DERAND_SOCK_ID_BASE){
+			u32 idx = get_sockcall_idx(e.type);
+			e.type = (e.type & ~SC_ID_MASK) | (idx_mapping[idx] + DERAND_SOCK_ID_BASE);
+		}
+	}
 }
 
 int Records::dump(const char* filename){
@@ -230,6 +255,7 @@ void Records::print(FILE* fout){
 	fprintf(fout, "%lu sockcalls\n", sockcalls.size());
 	for (int i = 0; i < sockcalls.size(); i++){
 		derand_rec_sockcall &sc = sockcalls[i];
+		fprintf(fout, "%d ", i);
 		if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG){
 			fprintf(fout, "sendmsg: 0x%x %lu thread %lu\n", sc.sendmsg.flags, sc.sendmsg.size, sc.thread_id);
 		}else if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG){

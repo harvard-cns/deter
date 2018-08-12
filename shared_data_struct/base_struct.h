@@ -77,7 +77,8 @@ static inline const char* get_sockcall_str(struct derand_rec_sockcall *sc, char*
 	}
 	return buf;
 }
-#define get_sockcall_idx(type) (((type) - DERAND_SOCK_ID_BASE) & 0x0fffffff)
+#define SC_ID_MASK 0x0fffffff
+#define get_sockcall_idx(type) (((type) - DERAND_SOCK_ID_BASE) & SC_ID_MASK)
 
 #define EVENT_TYPE_PACKET 0
 #define EVENT_TYPE_TASKLET 1
