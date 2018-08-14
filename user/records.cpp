@@ -670,8 +670,9 @@ void Records::print_compressed_storage_size(){
 	size += sizeof(uint8_t) * siqq.size();
 	printf("siqq: %lu\n", sizeof(uint8_t) * siqq.size());
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
-		size += ebq[i].raw_storage_size();
-		printf("ebq[%d]: %lu\n", i, ebq[i].raw_storage_size());
+		uint64_t sz = ebq[i].compressed_storage_size();
+		size += sz;
+		printf("ebq[%d]: %lu\n", i, sz);
 	}
 	printf("total: %lu\n", size);
 }

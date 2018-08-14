@@ -94,6 +94,110 @@ struct BitArray{
 	uint64_t raw_storage_size(){
 		return sizeof(n) + sizeof(uint32_t) * v.size();
 	}
+	uint64_t compressed_storage_size(){
+		uint64_t res = raw_storage_size();
+		uint64_t tmp = storage_size_index_x(0);
+		if (tmp < res)
+			res = tmp;
+		tmp = storage_size_index_x(1);
+		if (tmp < res)
+			res = tmp;
+		tmp = storage_size_delta_of_diff();
+		if (tmp < res)
+			res = tmp;
+		return res;
+	}
+	uint64_t storage_size_index_x(int x){
+		uint64_t res = 0;
+		if (format == RAW){
+			for (uint32_t i = 0, ib = 0; ib < n; i++)
+				for (uint32_t j = 0; j < 32 && ib < n; j++, ib++)
+					if (((v[i] >> j) & 1) == x)
+						res += sizeof(uint32_t); // 4-byte index
+			res += sizeof(n);
+		}else {
+			res = -1;
+		}
+		return res;
+	}
+	uint64_t storage_size_delta_of_diff(){
+		// In this way of storage, we record the number of consecutive bits that
+		// are the same, called segments. The number of bits in each segment is 
+		// its length.
+		uint64_t res;
+
+		// if no records, directly return
+		if (v.size() == 0)
+			return sizeof(n);
+
+		// records the length of each segment 
+		std::vector<uint32_t> len;
+		if (format == RAW){
+			uint32_t cur_len = 0;
+			uint8_t b = 0; // previous bit
+			for (uint32_t i = 0, ib = 0; ib < n; i++)
+				for (uint32_t j = 0; j < 32 && ib < n; j++, ib++)
+					if (((v[i] >> j) & 1) == b)
+						cur_len++;
+					else {
+						if (cur_len)
+							len.push_back(cur_len);
+						cur_len = 1;
+						b ^= 1;
+					}
+			if (cur_len)
+				len.push_back(cur_len);
+			// Try different nbit to record segment length
+			// If one segment is longer than the nbit can record,
+			// use (2^nbit-1) to extend
+			// For example, nbit = 4
+			// 1: 0000
+			// 2: 0001
+			// ...
+			// 15: 1110
+			// 16: 1111,0000
+			// ...
+			// 30: 1111,1110
+			// 31: 1111,1111,0000
+			res = raw_storage_size();
+			for (int nbit = 1; nbit < 32; nbit++){
+				uint64_t tmp = 0, x = (1<<nbit)-1;
+				for (uint32_t l : len){
+					tmp += ((l-1) / x + 1) * nbit; // roundup(l/x) * nbit
+				}
+				tmp = tmp / 8 + sizeof(n);
+				if (tmp < res)
+					res = tmp;
+			}
+			// Try dynamically increase the nbits for each segment
+			// 1: 0
+			// 2: 1,00
+			// 3: 1,01
+			// 4: 1,10
+			// 5: 1,11,0000
+			// 6: 1,11,0001
+			// ...
+			// 19: 1,11,1110
+			// 20: 1,11,1111,00000000
+			uint64_t tmp = 0;
+			for (uint32_t l : len){
+				uint32_t left = l, w = 1, nbit = 0;
+				for (; left; w*=2){
+					nbit += w;
+					if (left <= (1<<w)-1)
+						break;
+					left -= (1<<w) -1;
+				}
+				tmp += nbit;
+			}
+			tmp = tmp/8 + sizeof(n);
+			if (tmp < res)
+				res = tmp;
+			return res;
+		}else {
+			return -1;
+		}
+	}
 };
 
 class Records{
