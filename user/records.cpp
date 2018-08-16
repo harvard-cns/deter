@@ -247,11 +247,46 @@ fail_read:
 	return -1;
 }
 
+uint64_t Records::get_pkt_received(){
+	uint64_t pkt_rcvd = 0;
+	for (int i = 0; i < evts.size(); i++)
+		pkt_rcvd += i>0 ? (evts[i].seq - evts[i-1].seq - 1) : evts[i].seq;
+	return pkt_rcvd;
+}
+
+uint64_t Records::get_total_bytes_received(){
+	uint64_t total_bytes = 0;
+	for (int i = 0; i < sockcalls.size(); i++){
+		derand_rec_sockcall &sc = sockcalls[i];
+		if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG)
+			total_bytes += sc.recvmsg.size;
+	}
+	return total_bytes;
+}
+
+uint64_t Records::get_total_bytes_sent(){
+	uint64_t total_bytes = 0;
+	for (int i = 0; i < sockcalls.size(); i++){
+		derand_rec_sockcall &sc = sockcalls[i];
+		if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG)
+			total_bytes += sc.sendmsg.size;
+	}
+	return total_bytes;
+}
+
 void Records::print(FILE* fout){
 	fprintf(fout, "broken: %x\n", broken);
 	fprintf(fout, "alert: %x\n", alert);
 	fprintf(fout, "mode: %u\n", mode);
 	fprintf(fout, "%08x:%hu %08x:%hu\n", sip, sport, dip, dport);
+
+	// count total bytes transferred
+	printf("total bytes sent: %lu\n", get_total_bytes_sent());
+	printf("total bytes received: %lu\n", get_total_bytes_received());
+
+	// count pkt received
+	printf("packets received: %lu\n", get_pkt_received());
+
 	fprintf(fout, "%lu sockcalls\n", sockcalls.size());
 	for (int i = 0; i < sockcalls.size(); i++){
 		derand_rec_sockcall &sc = sockcalls[i];
@@ -269,6 +304,7 @@ void Records::print(FILE* fout){
 				fprintf(fout, "setsockopt: %hhu %hhu %hhu ", sc.setsockopt.level, sc.setsockopt.optname, sc.setsockopt.optlen);
 				for (int j = 0; j < sc.setsockopt.optlen; j++)
 					fprintf(fout, " %hhx", sc.setsockopt.optval[j]);
+				fprintf(fout, " thread %lu", sc.thread_id);
 				fprintf(fout, "\n");
 			}else 
 				fprintf(fout, "Error: unsupported setsockopt\n");
@@ -514,39 +550,25 @@ void Records::clear(){
 	#endif
 }
 
-uint64_t get_sockcall_key(derand_rec_sockcall &sc){
-	uint64_t key = sc.type;
+string get_sockcall_key(derand_rec_sockcall &sc){
+	char res[128];
 	if (sc.type == DERAND_SOCKCALL_TYPE_CLOSE){
-		key <<= 32;
-		key |= sc.close.timeout;
-		key <<= 30;
+		sprintf(res, "%u,%lu", sc.type, sc.close.timeout);
 	}else if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG){
-		key <<= 32;
-		key |= sc.sendmsg.flags;
-		key <<= 30;
-		key |= sc.sendmsg.size & ((1<<30)-1);
+		sprintf(res, "%u,%u,%lu", sc.type, sc.sendmsg.flags, sc.sendmsg.size);
 	}else if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG){
-		key <<= 32;
-		key |= sc.recvmsg.flags;
-		key <<= 30;
-		key |= sc.recvmsg.size & ((1<<30)-1);
+		sprintf(res, "%u,%u,%lu", sc.type, sc.recvmsg.flags, sc.recvmsg.size);
 	}else if (sc.type == DERAND_SOCKCALL_TYPE_SPLICE_READ){
-		key <<= 32;
-		key |= sc.splice_read.flags;
-		key <<= 30;
-		key |= sc.splice_read.size & ((1<<30)-1);
+		sprintf(res, "%u,%u,%lu", sc.type, sc.splice_read.flags, sc.splice_read.size);
 	}else if (sc.type == DERAND_SOCKCALL_TYPE_SETSOCKOPT){
-		key <<= 8;
-		key |= sc.setsockopt.level;
-		key <<= 8;
-		key |= sc.setsockopt.optname;
-		key <<= 8;
-		key |= sc.setsockopt.optlen;
-		key <<= 32;
-		for (int j = 0; j < sc.setsockopt.optlen && j < 4; j++)
-			key |= sc.setsockopt.optval[j] << (j*8);
+		int posn;
+		char *buf = res;
+		sprintf(buf, "%u,%u,%u,%u%n", sc.type, sc.setsockopt.level, sc.setsockopt.optname, sc.setsockopt.optlen, &posn);
+		buf += posn;
+		for (int j = 0; j < sc.setsockopt.optlen; j++, buf += posn)
+			sprintf(buf, ",%02x%n", sc.setsockopt.optval[j], &posn);
 	}
-	return key;
+	return res;
 }
 
 void Records::print_raw_storage_size(){
@@ -576,70 +598,209 @@ void Records::print_raw_storage_size(){
 	printf("total: %lu\n", size);
 }
 
-void Records::print_compressed_storage_size(){
-	uint64_t size = 0;
-	size += sizeof(init_data);
-	printf("init_data: %lu\n", sizeof(init_data));
+uint64_t Records::compressed_evt_size(){
+	#define PRINT_COMPRESSED 0
+	int thread_nbit = 1;
+	uint64_t this_size1 = 0, this_size2 = 0;
 	{
-		uint64_t this_size = 0, cnt = 0;
-		// | 16bit seq# delta | 2bit code | data (variable size) |
-		// if code == 00: data = event type (tasklet/timeout) (6bit)
-		// if code == 10: data = # consecutive sockcall (6bit)
-		// if code == 11: data = # consecutive sockcall (6bit) | thread_id (8bit)
+		uint64_t pkt_cnt = 0, sc_cnt = 0; // consecutive packet count, consecutive sockcall event
+		// | 2bit code | data (variable size) |
+		// if code == 00: data = # pkt before this evt (3bit (pkt_nbit_in_evt)) | event type (tasklet/timeout) (3bit)
+		// if code == 01: data = # pkt (6bit (pkt_nbit_general)) (range: 1 ~ 1<<pkt_nbit_general))
+		// if code == 10: data = # pkt before this sockcall (3bit (pkt_nbit_in_evt)) | # consecutive sockcall (3bit (sc_nbit))
+		// if code == 11: data = # pkt before this sockcall (3bit (pkt_nbit_in_evt)) | # consecutive sockcall (3bit (sc_nbit)) | thread_id (1bit)
+		int pkt_nbit_in_evt = 3, pkt_nbit_general = 6, sc_nbit = 3;
+		uint64_t last_thread_id = -1;
 		for (int i = 0; i < evts.size(); i++){
-			if (evts[i].type < DERAND_SOCK_ID_BASE){
-				this_size += 3;
-			}else {
+
+			// deal with the packet preceeding this evt
+			pkt_cnt = i>0 ? (evts[i].seq - evts[i-1].seq - 1) : evts[i].seq;
+			uint64_t np = pkt_cnt; // number of pkt recorded with the evt
+			if (pkt_cnt >= (1<<pkt_nbit_in_evt)){
+				np = (1<<pkt_nbit_in_evt)-1;
+				pkt_cnt -= (1<<pkt_nbit_in_evt) - 1; // (1<<pkt_nbit_in_evt)-1 can be stored together with evt
+				this_size1 += ((pkt_cnt - 1) / (1<<pkt_nbit_general) + 1) * (2 + pkt_nbit_general); // roundup(pkt_cnt / 2^pkt_nbit_general) * bits
+				#if PRINT_COMPRESSED
+				for (int j = pkt_cnt; j > 0 ; j-=1<<pkt_nbit_general)
+					printf("01 %d\n", j >= (1<<pkt_nbit_general) ? 1<<pkt_nbit_general : j);
+				#endif
+			}
+
+			// deal with this evt
+			if (evt_is_sockcall(&evts[i])){
 				uint64_t this_thread_id = sockcalls[get_sockcall_idx(evts[i].type)].thread_id;
-				if (i > 0 &&
-					evts[i-1].type >= DERAND_SOCK_ID_BASE &&
-					sockcalls[get_sockcall_idx(evts[i-1].type)].thread_id == this_thread_id &&
-					cnt < 64){
-					cnt++;
-				}else{
-					this_size += 3 + (this_thread_id != 0);
-					cnt = 0;
-				}
+				// if this is from a diff thread than the last sockcall, code = 11, and record thread_id
+				if (this_thread_id != last_thread_id)
+					this_size1 += thread_nbit;
+				// find consecutive sockcall from the same thread
+				for (sc_cnt = 1; 
+						i+1 < evts.size()
+						&& evt_is_sockcall(&evts[i+1])
+						&& evts[i+1].seq == evts[i].seq + 1 // consecutive sockcall events
+						&& sockcalls[get_sockcall_idx(evts[i+1].type)].thread_id == this_thread_id // from the same thread
+						&& sc_cnt < (1<<sc_nbit); 
+						i++, sc_cnt++);
+				this_size1 += 2 + pkt_nbit_in_evt + sc_nbit;
+				#if PRINT_COMPRESSED
+				if (last_thread_id == this_thread_id)
+					printf("10 %lu %lu\n", np, sc_cnt + 1);
+				else
+					printf("11 %lu %lu %lu\n", np, sc_cnt, this_thread_id);
+				#endif
+				last_thread_id = this_thread_id;
+			}else {
+				// other event
+				this_size1 += 2 + pkt_nbit_in_evt + 3;
+				#if PRINT_COMPRESSED
+				printf("00 %lu %u\n", np, evts[i].type);
+				#endif
 			}
 		}
-		size += this_size;
-		printf("evts: %lu\n", this_size);
+		this_size1 /= 8;
 	}
 
 	{
-		uint64_t this_size = 0;
-		// assign a unique id to each unique flag
-		map<int,int> flag_id;
-		for (int i = 0; i < sockcalls.size(); i++){
-			if (sockcalls[i].type != DERAND_SOCKCALL_TYPE_CLOSE 
-				&& sockcalls[i].type != DERAND_SOCKCALL_TYPE_SETSOCKOPT
-				&& flag_id.find(sockcalls[i].sendmsg.flags) == flag_id.end()){
-				uint64_t id = flag_id.size();
-				flag_id[sockcalls[i].sendmsg.flags] = id;
+		// deal with pkt seq
+		vector<int> pkt_seq;
+		for (int i = 0, seq = 0; i < evts.size(); i++){
+			for (; seq < evts[i].seq; seq++)
+				pkt_seq.push_back(seq);
+			seq++;
+		}
+		for (int i = 0; i < pkt_seq.size(); i++){
+			// deal with non-pkt
+			int n_np = i > 0 ? pkt_seq[i]-pkt_seq[i-1]-1 : pkt_seq[i];
+			if (n_np > 0)
+				this_size2 += nbit_dynamic_coding(n_np);
+			// deal with pkt
+			int cnt = 1;
+			for (;i+1 < pkt_seq.size() && pkt_seq[i+1] == pkt_seq[i] + 1; i++)
+				cnt++;
+			if (cnt > 0)
+				this_size2 += nbit_dynamic_coding(cnt);
+		}
+
+		// deal with other non-pkt events
+		uint64_t last_thread_id = -1;
+		int sc_nbit = 3;
+		int sc_cnt = 0;
+		for (int i = 0; i < evts.size(); i++){
+			// deal with this evt
+			if (evt_is_sockcall(&evts[i])){
+				uint64_t this_thread_id = sockcalls[get_sockcall_idx(evts[i].type)].thread_id;
+				// if this is from a diff thread than the last sockcall, code = 11, and record thread_id
+				if (this_thread_id != last_thread_id)
+					this_size2 += thread_nbit; // 1 bit for a diff thread_id
+				// find consecutive sockcall from the same thread
+				for (sc_cnt = 1; 
+						i+1 < evts.size()
+						&& evt_is_sockcall(&evts[i+1])
+						&& sockcalls[get_sockcall_idx(evts[i+1].type)].thread_id == this_thread_id // from the same thread
+						//&& sc_cnt < (1<<sc_nbit)
+						;i++, sc_cnt++);
+				this_size2 += 1 + nbit_dynamic_coding(sc_nbit); // 1 bit for type 0: sockcall
+				last_thread_id = this_thread_id;
+			}else {
+				// other event
+				this_size2 += 1 + 3; // 1 bit for type 1: non-sockcall, 3 bit for type
 			}
 		}
-		this_size += 4 * flag_id.size();
+		this_size2 /= 8;
+	}
+	return min(this_size1, this_size2);
+}
+
+uint64_t Records::compressed_sockcall_size(){
+	uint64_t this_size1 = 0, this_size2 = 0;
+	int last_thread_id = 0, thread_id_bits = 0;
+	// calculate thread id bits
+	for (int i = 0; i < sockcalls.size(); i++){
+		// update storage for thread_id
+		if (sockcalls[i].thread_id > last_thread_id){
+			if (sockcalls[i].thread_id >= (1 << (thread_id_bits))){
+				thread_id_bits++;
+			}
+			last_thread_id = sockcalls[i].thread_id;
+		}
+	}
+
+	// assign a unique id to each unique flag
+	map<int,int> flag_id;
+	for (int i = 0; i < sockcalls.size(); i++){
+		if (sockcalls[i].type != DERAND_SOCKCALL_TYPE_CLOSE 
+				&& sockcalls[i].type != DERAND_SOCKCALL_TYPE_SETSOCKOPT
+				&& flag_id.find(sockcalls[i].sendmsg.flags) == flag_id.end()){
+			uint64_t id = flag_id.size();
+			flag_id[sockcalls[i].sendmsg.flags] = id;
+		}
+	}
+
+	{
+		this_size1 += 32 * flag_id.size();
 		// store each sockcall. Normally # diff flag combination <= 16, so flag_id is 4bit
-		int cnt = 0, last_thread_id = 0, thread_id_bytes = 0;
+		int cnt = 0;
 		for (int i = 0; i < sockcalls.size(); i++){
 			if (i > 0 && get_sockcall_key(sockcalls[i]) == get_sockcall_key(sockcalls[i-1]) && cnt < 16){
 				cnt++;
 			}else{
-				this_size += 4 + thread_id_bytes; // 2bit type, 4bit #consecutive same sockcall, 4bit flag_id, 22bit size, variable thread_id_bytes
+				this_size1 += 32 + thread_id_bits; // 2bit type, 4bit #consecutive same sockcall, 4bit flag_id, 22bit size, variable thread_id_bits
 				cnt = 0;
 			}
-			// update storage for thread_id
-			if (sockcalls[i].thread_id > last_thread_id){
-				if (sockcalls[i].thread_id >= (1 << (thread_id_bytes*8))){
-					thread_id_bytes++;
-					this_size += 4; // record the idx where thread_id_bytes increases
-				}
-				last_thread_id = sockcalls[i].thread_id;
+		}
+		this_size1 /= 8;
+	}
+	{
+		this_size2 += 32 * flag_id.size(); // 32 bits per flag
+
+		// assign id for each unique sockcall
+		map<string, int> sc_hash;
+		for (int i = 0; i < sockcalls.size(); i++){
+			string key = get_sockcall_key(sockcalls[i]);
+			key += "," + to_string(sockcalls[i].thread_id);
+			sc_hash[key]++;
+		}
+		this_size2 += 32 * sc_hash.size(); // 3bit sc_type, 4bit flag, 22bit size, and TBD
+		// get min bits per sockcall
+		int nbits = 0;
+		for (; (1 << nbits) < sc_hash.size(); nbits++);
+		#if 0
+		for (auto it : sc_hash)
+			printf("%s %d\n", it.first.c_str(), it.second);
+		printf("nbits = %d\n", nbits);
+		#endif
+
+		int cnt_bits = 2;
+		for (int i = 0, cnt = 0; i < sockcalls.size(); i++){
+			if (i && get_sockcall_key(sockcalls[i]) == get_sockcall_key(sockcalls[i-1]) && cnt < (1<<cnt_bits)){
+				cnt++;
+			}else{
+				this_size2 += nbits + cnt_bits;
+				cnt = 0;
 			}
 		}
-		size += this_size;
-		printf("sockcalls: %lu\n", this_size);
+		//this_size2 = sockcalls.size() * nbits / 8;
+		this_size2 /= 8;
 	}
+	return min(this_size1, this_size2);
+}
+
+derand_rec_sockcall* Records::evt_get_sc(derand_event *evt){
+	return &sockcalls[get_sockcall_idx(evt->type)];
+}
+
+void Records::print_compressed_storage_size(){
+	uint64_t size = 0, this_size = 0;
+	size += sizeof(init_data);
+	printf("init_data: %lu\n", sizeof(init_data));
+
+	this_size = compressed_evt_size();
+	size += this_size;
+	printf("evts: %lu\n", this_size);
+
+	this_size = compressed_sockcall_size();
+	size += this_size;
+	printf("sockcalls: %lu\n", this_size);
+
 	//size += sizeof(uint32_t) * dpq.size();
 	//printf("dpq: %lu\n", sizeof(uint32_t) * dpq.size());
 	size += sizeof(jiffies_rec) * jiffies.size();

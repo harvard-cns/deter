@@ -7,6 +7,28 @@
 #include <cassert>
 #include "base_struct.hpp"
 
+static uint32_t nbit_dynamic_coding(uint64_t x){
+	// Dynamically increase the nbits for recording x
+	// The assumption is that smaller x is much more frequent than larger x, especially x = 1
+	// 1: 0
+	// 2: 1,00
+	// 3: 1,01
+	// 4: 1,10
+	// 5: 1,11,0000
+	// 6: 1,11,0001
+	// ...
+	// 19: 1,11,1110
+	// 20: 1,11,1111,00000000
+	uint32_t w = 1, nbit = 0;
+	for (; x; w*=2){
+		nbit += w;
+		if (x <= (1<<w)-1)
+			break;
+		x -= (1<<w) -1;
+	}
+	return nbit;
+}
+
 struct BitArray{
 	u32 n;
 	enum Format{
@@ -181,14 +203,7 @@ struct BitArray{
 			// 20: 1,11,1111,00000000
 			uint64_t tmp = 0;
 			for (uint32_t l : len){
-				uint32_t left = l, w = 1, nbit = 0;
-				for (; left; w*=2){
-					nbit += w;
-					if (left <= (1<<w)-1)
-						break;
-					left -= (1<<w) -1;
-				}
-				tmp += nbit;
+				tmp += nbit_dynamic_coding(l);
 			}
 			tmp = tmp/8 + sizeof(n);
 			if (tmp < res)
@@ -232,7 +247,13 @@ public:
 	void print(FILE* fout = stdout);
 	void print_init_data(FILE* fout = stdout);
 	void clear();
+	uint64_t get_pkt_received();
+	uint64_t get_total_bytes_received();
+	uint64_t get_total_bytes_sent();
 	void print_raw_storage_size();
+	derand_rec_sockcall* evt_get_sc(derand_event *evt);
+	uint64_t compressed_evt_size();
+	uint64_t compressed_sockcall_size();
 	void print_compressed_storage_size();
 };
 
