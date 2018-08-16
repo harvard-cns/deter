@@ -140,6 +140,12 @@ int Records::dump(const char* filename){
 	if (!dump_vector(siqq, fout))
 		goto fail_write;
 
+	#if COLLECT_TX_STAMP
+	// write tsq
+	if (!dump_vector(tsq, fout))
+		goto fail_write;
+	#endif
+
 	// write effect_bool
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		if (!ebq[i].dump(fout))
@@ -222,6 +228,12 @@ int Records::read(const char* filename){
 	// read siqq
 	if (!read_vector(siqq, fin))
 		goto fail_read;
+
+	#if COLLECT_TX_STAMP
+	// read tsq
+	if (!read_vector(tsq, fin))
+		goto fail_read;
+	#endif
 
 	// read effect_bool
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
@@ -354,6 +366,12 @@ void Records::print(FILE* fout){
 	fprintf(fout, "%lu skb_still_in_host_queue:\n", siqq.size());
 	for (int64_t i = 0; i < siqq.size(); i++)
 		fprintf(fout, "%hhu\n", siqq[i]);
+
+	#if COLLECT_TX_STAMP
+	fprintf(fout, "%lu tsq:\n", tsq.size());
+	for (int64_t i = 0; i < tsq.size(); i++)
+		fprintf(fout, "%d\n", tsq[i]);
+	#endif
 
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
 		auto &eb = ebq[i];
@@ -540,6 +558,9 @@ void Records::clear(){
 	n_sockets_allocated = 0;
 	mstamp.clear();
 	siqq.clear();
+	#if COLLECT_TX_STAMP
+	tsq.clear();
+	#endif
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		ebq[i].clear();
 	#if DERAND_DEBUG
@@ -803,33 +824,54 @@ void Records::print_compressed_storage_size(){
 
 	//size += sizeof(uint32_t) * dpq.size();
 	//printf("dpq: %lu\n", sizeof(uint32_t) * dpq.size());
-	size += sizeof(jiffies_rec) * jiffies.size();
-	printf("jiffies: %lu\n", sizeof(jiffies_rec) * jiffies.size());
+
+	{
+		this_size = 64 + nbit_dynamic_coding(jiffies.size());
+		for (int i = 1; i < jiffies.size(); i++)
+			this_size += nbit_dynamic_coding(jiffies[i].jiffies_delta) + nbit_dynamic_coding(jiffies[i].idx_delta);
+		this_size /= 8;
+	}
+	size += this_size;
+	printf("jiffies: %lu\n",  this_size);
 	size += mpq.raw_storage_size();
 	printf("mpq: %lu\n", mpq.raw_storage_size());
 	size += sizeof(memory_allocated_rec) * memory_allocated.size();
 	printf("memory_allocated: %lu\n", sizeof(memory_allocated_rec) * memory_allocated.size());
 	{
 		uint64_t jiffies_size = 0, us_size = 0;
+		// jiffies should be mergable with jiffies without any extra overhead.
+		#if 0
 		// stamp_jiffies
 		for (int i = 0; i < mstamp.size(); i++){
 			if (i == 0 || mstamp[i].stamp_jiffies != mstamp[i-1].stamp_jiffies)
 				jiffies_size += 8; // 32bit jiffies delta, 32bit idx delta
 		}
+		#endif
 		// stamp_us
 		uint64_t us_bits = 0;
 		for (int i = 0; i < mstamp.size(); i++){
+			#if 1
+			if (i == 0)
+				us_bits += 32;
+			else
+				us_bits += nbit_dynamic_coding(mstamp[i].stamp_us - mstamp[i-1].stamp_us);
+			#else
 			if (i == 0 || mstamp[i].stamp_us - mstamp[i-1].stamp_us >= 15)
 				us_bits += 4 + 32; // 4bit 0xf (meaning delta >= 15), 32bit delta
 			else
 				us_bits += 4; // 4bit delta
+			#endif
 		}
 		us_size = us_bits/8;
-		size += jiffies_size + us_size;
-		printf("mstamp: jiffies: %lu us: %lu total: %lu\n", jiffies_size, us_size, jiffies_size+us_size);
+		this_size = jiffies_size + us_size + nbit_dynamic_coding(mstamp.size()) / 8;
+		size += this_size;
+		printf("mstamp: jiffies: %lu us: %lu total: %lu\n", jiffies_size, us_size, this_size);
 	}
-	size += sizeof(uint8_t) * siqq.size();
-	printf("siqq: %lu\n", sizeof(uint8_t) * siqq.size());
+	{
+		this_size = (nbit_dynamic_coding(siqq.size()) + siqq.size()) / 8;
+		size += this_size;
+		printf("siqq: %lu\n", this_size);
+	}
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
 		uint64_t sz = ebq[i].compressed_storage_size();
 		size += sz;

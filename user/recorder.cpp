@@ -131,6 +131,13 @@ int main()
 				}
 				rec->aeq.h = j;
 				#endif
+				#if COLLECT_TX_STAMP
+				res[i].broken |= (rec->tsq.h + DERAND_TX_STAMP_PER_SOCK < rec->tsq.t) << (10 + DERAND_EFFECT_BOOL_N_LOC);
+				for (j = rec->tsq.h; j < rec->tsq.t; j++){
+					res[i].tsq.push_back(rec->tsq.v[get_tsq_idx(j)]);
+				}
+				rec->tsq.h = j;
+				#endif
 
 				// if the socket's recorder has finished, do the finish job
 				// NOTE: we must use the test result before the copying. Otherwise if we test here, there may be new data after copy, which will be lost

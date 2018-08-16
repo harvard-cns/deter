@@ -114,7 +114,7 @@ struct BitArray{
 	}
 
 	uint64_t raw_storage_size(){
-		return sizeof(n) + sizeof(uint32_t) * v.size();
+		return nbit_dynamic_coding(n)/8 + sizeof(uint32_t) * v.size();
 	}
 	uint64_t compressed_storage_size(){
 		uint64_t res = raw_storage_size();
@@ -136,7 +136,7 @@ struct BitArray{
 				for (uint32_t j = 0; j < 32 && ib < n; j++, ib++)
 					if (((v[i] >> j) & 1) == x)
 						res += sizeof(uint32_t); // 4-byte index
-			res += sizeof(n);
+			res += nbit_dynamic_coding(n) / 8;
 		}else {
 			res = -1;
 		}
@@ -150,7 +150,7 @@ struct BitArray{
 
 		// if no records, directly return
 		if (v.size() == 0)
-			return sizeof(n);
+			return nbit_dynamic_coding(n) / 8;
 
 		// records the length of each segment 
 		std::vector<uint32_t> len;
@@ -187,7 +187,7 @@ struct BitArray{
 				for (uint32_t l : len){
 					tmp += ((l-1) / x + 1) * nbit; // roundup(l/x) * nbit
 				}
-				tmp = tmp / 8 + sizeof(n);
+				tmp = (tmp + nbit_dynamic_coding(n)) / 8;
 				if (tmp < res)
 					res = tmp;
 			}
@@ -205,7 +205,7 @@ struct BitArray{
 			for (uint32_t l : len){
 				tmp += nbit_dynamic_coding(l);
 			}
-			tmp = tmp/8 + sizeof(n);
+			tmp = (tmp + nbit_dynamic_coding(n)) / 8;
 			if (tmp < res)
 				res = tmp;
 			return res;
@@ -232,6 +232,9 @@ public:
 	std::vector<skb_mstamp> mstamp;
 	std::vector<uint8_t> siqq;
 	BitArray ebq[DERAND_EFFECT_BOOL_N_LOC];
+	#if COLLECT_TX_STAMP
+	std::vector<int32_t> tsq;
+	#endif
 	#if DERAND_DEBUG
 	std::vector<GeneralEvent> geq;
 	#endif
