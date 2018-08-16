@@ -127,6 +127,9 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	#if ADVANCED_EVENT_ENABLE
 	rec->aeq.h = rec->aeq.t = 0;
 	#endif
+	#if COLLECT_TX_STAMP
+	rec->tsq.h = rec->tsq.t = 0;
+	#endif
 	if (mode == 0)
 		copy_from_server_sock(sk); // copy sock init data
 	else 
@@ -579,6 +582,18 @@ static void record_general_event(const struct sock *sk, int loc, u64 data){
 }
 #endif
 
+#if COLLECT_TX_STAMP
+static void tx_stamp(const struct sk_buff *skb){
+	struct derand_recorder *rec = (struct derand_recorder*)skb->sk->recorder;
+	if (!rec)
+		return;
+	u64 clock = local_clock();
+	rec->tsq.v[get_tsq_idx(rec->tsq.t)] = clock;
+	wmb();
+	rec->tsq.t++;
+}
+#endif
+
 /******************************
  * alert
  *****************************/
@@ -614,6 +629,9 @@ int bind_record_ops(void){
 	derand_record_ops.record_skb_still_in_host_queue = record_skb_still_in_host_queue;
 	#if DERAND_DEBUG
 	derand_record_ops.general_event = record_general_event;
+	#endif
+	#if COLLECT_TX_STAMP
+	derand_record_ops.tx_stamp = tx_stamp;
 	#endif
 	#if ADVANCED_EVENT_ENABLE
 	advanced_event = record_advanced_event;

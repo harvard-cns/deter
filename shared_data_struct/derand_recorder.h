@@ -3,7 +3,6 @@
 
 #include "base_struct.h"
 #include "tcp_sock_init_data.h"
-
 /***********************************
  * drop
  **********************************/
@@ -106,6 +105,17 @@ static inline u32 get_aeq_idx(u32 i){
 }
 #endif /* ADVANCED_EVENT_ENABLE */
 
+#if COLLECT_TX_STAMP
+#define DERAND_TX_STAMP_PER_SOCK 512
+struct TxStampQ{
+	u32 h, t;
+	u32 v[DERAND_TX_STAMP_PER_SOCK];
+};
+static inline u32 get_tsq_idx(u32 i){
+	return i & (DERAND_TX_STAMP_PER_SOCK - 1);
+}
+#endif
+
 #define DERAND_EVENT_PER_SOCK 1024
 #define DERAND_SOCKCALL_PER_SOCK 256
 
@@ -136,6 +146,9 @@ struct derand_recorder{
 	#endif
 	#if ADVANCED_EVENT_ENABLE
 	struct AdvancedEventQ aeq;
+	#endif
+	#if COLLECT_TX_STAMP
+	struct TxStampQ tsq;
 	#endif
 };
 
