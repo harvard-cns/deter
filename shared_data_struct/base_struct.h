@@ -94,6 +94,9 @@ struct derand_event{
 	u32 dbg_data;
 	#endif
 };
+static inline bool evt_is_sockcall(const struct derand_event* e){
+	return e->type >= DERAND_SOCK_ID_BASE;
+}
 static inline char* get_event_name(u32 type, char* buf){
 	uint32_t idx, loc;
 	switch (type){
