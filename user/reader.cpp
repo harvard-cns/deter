@@ -7,10 +7,14 @@ int main(int argc, char **argv){
 	}
 	Records rec;
 	rec.read(argv[1]);
+	#if 0
 	rec.print_raw_storage_size();
 	printf("\n");
+	#endif
+	#if 1
 	rec.print_compressed_storage_size();
 	printf("\n");
+	#endif
 	rec.print_init_data();
 	rec.print();
 	return 0;

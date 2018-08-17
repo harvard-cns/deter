@@ -7,7 +7,7 @@
 #include <cassert>
 #include "base_struct.hpp"
 
-static uint32_t nbit_dynamic_coding(uint64_t x){
+static uint32_t nbit_dynamic_coding(uint64_t x, uint64_t step = 0){
 	// Dynamically increase the nbits for recording x
 	// The assumption is that smaller x is much more frequent than larger x, especially x = 1
 	// 1: 0
@@ -20,11 +20,22 @@ static uint32_t nbit_dynamic_coding(uint64_t x){
 	// 19: 1,11,1110
 	// 20: 1,11,1111,00000000
 	uint32_t w = 1, nbit = 0;
-	for (; x; w*=2){
-		nbit += w;
-		if (x <= (1<<w)-1)
-			break;
-		x -= (1<<w) -1;
+	if (step == 0){
+		for (; x; w*=2){
+			nbit += w;
+			if (x <= (1lu<<w)-1)
+				break;
+			x -= (1lu<<w) - 1;
+		}
+	}else{
+		for (; x; w = (step & 0xf) + 1){
+			nbit += w;
+			if (x <= (1lu << w) - 1)
+				break;
+			x -= (1lu << w) - 1;
+			if (step >> 4)
+				step >>= 4;
+		}
 	}
 	return nbit;
 }

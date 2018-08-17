@@ -719,7 +719,7 @@ uint64_t Records::compressed_evt_size(){
 						&& sockcalls[get_sockcall_idx(evts[i+1].type)].thread_id == this_thread_id // from the same thread
 						//&& sc_cnt < (1<<sc_nbit)
 						;i++, sc_cnt++);
-				this_size2 += 1 + nbit_dynamic_coding(sc_nbit); // 1 bit for type 0: sockcall
+				this_size2 += 1 + nbit_dynamic_coding(sc_cnt); // 1 bit for type 0: sockcall
 				last_thread_id = this_thread_id;
 			}else {
 				// other event
@@ -757,7 +757,7 @@ uint64_t Records::compressed_sockcall_size(){
 	}
 
 	{
-		this_size1 += 32 * flag_id.size();
+		//this_size1 += 32 * flag_id.size();
 		// store each sockcall. Normally # diff flag combination <= 16, so flag_id is 4bit
 		int cnt = 0;
 		for (int i = 0; i < sockcalls.size(); i++){
@@ -790,14 +790,9 @@ uint64_t Records::compressed_sockcall_size(){
 		printf("nbits = %d\n", nbits);
 		#endif
 
-		int cnt_bits = 2;
 		for (int i = 0, cnt = 0; i < sockcalls.size(); i++){
-			if (i && get_sockcall_key(sockcalls[i]) == get_sockcall_key(sockcalls[i-1]) && cnt < (1<<cnt_bits)){
-				cnt++;
-			}else{
-				this_size2 += nbits + cnt_bits;
-				cnt = 0;
-			}
+			for (cnt = 1; i+1 < sockcalls.size() && get_sockcall_key(sockcalls[i]) == get_sockcall_key(sockcalls[i+1]); i++,cnt++);
+			this_size2 += nbits + nbit_dynamic_coding(cnt);
 		}
 		//this_size2 = sockcalls.size() * nbits / 8;
 		this_size2 /= 8;
@@ -811,8 +806,10 @@ derand_rec_sockcall* Records::evt_get_sc(derand_event *evt){
 
 void Records::print_compressed_storage_size(){
 	uint64_t size = 0, this_size = 0;
-	size += sizeof(init_data);
-	printf("init_data: %lu\n", sizeof(init_data));
+	// On average, there are 23 diff socket variables between two diff sockets (server vs. server or client vs. client)
+	this_size = 23 * 4;
+	size += this_size;
+	printf("init_data: %lu\n", this_size);
 
 	this_size = compressed_evt_size();
 	size += this_size;
@@ -864,8 +861,12 @@ void Records::print_compressed_storage_size(){
 		}
 		us_size = us_bits/8;
 		this_size = jiffies_size + us_size + nbit_dynamic_coding(mstamp.size()) / 8;
+		#if 1
 		size += this_size;
 		printf("mstamp: jiffies: %lu us: %lu total: %lu\n", jiffies_size, us_size, this_size);
+		#else
+		printf("mstamp: NOT counted\n");
+		#endif
 	}
 	{
 		this_size = (nbit_dynamic_coding(siqq.size()) + siqq.size()) / 8;
@@ -877,5 +878,5 @@ void Records::print_compressed_storage_size(){
 		size += sz;
 		printf("ebq[%d]: %lu\n", i, sz);
 	}
-	printf("total: %lu\n", size);
+	printf("compressed total: %lu\n", size);
 }
