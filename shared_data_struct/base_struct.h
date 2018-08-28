@@ -4,7 +4,7 @@
 #include "tcp_sock_init_data.h"
 
 #define DERAND_DEBUG 0
-#define ADVANCED_EVENT_ENABLE 1
+#define ADVANCED_EVENT_ENABLE 0
 #define COLLECT_TX_STAMP 0
 
 /* Different types of socket calls' ID starts with different highest 4 bits */
