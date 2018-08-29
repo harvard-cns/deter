@@ -326,12 +326,18 @@ void Records::print(FILE* fout){
 	for (int i = 0; i < evts.size(); i++){
 		derand_event &e = evts[i];
 		char buf[32];
+		#if GET_EVENT_STAMP
+		fprintf(fout, "%.9lf ", e.ts * 1e-9);
+		#endif
 		fprintf(fout, "%u %s", e.seq, get_event_name(e.type, buf));
 		if (e.type >= DERAND_SOCK_ID_BASE)
 			fprintf(fout, " %s", get_sockcall_str(&sockcalls[get_sockcall_idx(e.type)], buf));
 
 		#if DERAND_DEBUG
 		fprintf(fout, " %u", e.dbg_data);
+		#endif
+		#if GET_CWND
+		fprintf(fout, " %u %u %u", e.cwnd, e.ssthresh, e.is_cwnd_limited);
 		#endif
 		fprintf(fout, "\n");
 	}

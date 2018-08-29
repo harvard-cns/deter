@@ -6,6 +6,8 @@
 #define DERAND_DEBUG 0
 #define ADVANCED_EVENT_ENABLE 0
 #define COLLECT_TX_STAMP 0
+#define GET_EVENT_STAMP 1
+#define GET_CWND 1
 
 /* Different types of socket calls' ID starts with different highest 4 bits */
 #define DERAND_SOCK_ID_BASE 100
@@ -93,6 +95,13 @@ struct derand_event{
 	u32 type; // 0: pkt; 1: tsq; 2~98: timeout types; 99: finish; 100 ~ inf: socket call IDs + DERAND_SOCK_ID_BASE
 	#if DERAND_DEBUG
 	u32 dbg_data;
+	#endif
+	#if GET_EVENT_STAMP
+	u64 ts;
+	#endif
+	#if GET_CWND
+	u32 cwnd, ssthresh;
+	u32 is_cwnd_limited;
 	#endif
 };
 static inline bool evt_is_sockcall(const struct derand_event* e){

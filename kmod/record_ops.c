@@ -163,6 +163,7 @@ static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 static inline void new_event(struct sock *sk, u32 type){
 	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
 	u32 seq;
+	u32 idx;
 	if (!rec)
 		return;
 
@@ -170,11 +171,20 @@ static inline void new_event(struct sock *sk, u32 type){
 	seq = rec->seq++;
 
 	// enqueue the new event
+	idx = get_evt_q_idx(rec->evt_t);
 	#if DERAND_DEBUG
 	//add_geq(&rec->geq, 0, type);
-	rec->evts[get_evt_q_idx(rec->evt_t)] = (struct derand_event){.seq = seq, .type = type, .dbg_data = tcp_sk(sk)->write_seq};
+	rec->evts[idx] = (struct derand_event){.seq = seq, .type = type, .dbg_data = tcp_sk(sk)->write_seq};
 	#else
-	rec->evts[get_evt_q_idx(rec->evt_t)] = (struct derand_event){.seq = seq, .type = type};
+	rec->evts[idx] = (struct derand_event){.seq = seq, .type = type};
+	#endif
+	#if GET_EVENT_STAMP
+	rec->evts[idx].ts = ktime_get().tv64;
+	#endif
+	#if GET_CWND
+	rec->evts[idx].cwnd = tcp_sk(sk)->snd_cwnd;
+	rec->evts[idx].ssthresh = tcp_sk(sk)->snd_ssthresh;
+	rec->evts[idx].is_cwnd_limited = tcp_sk(sk)->is_cwnd_limited;
 	#endif
 	wmb();
 	rec->evt_t++;
