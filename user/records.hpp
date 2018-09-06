@@ -232,6 +232,7 @@ public:
 	uint32_t recorder_id;
 	uint32_t sip, dip;
 	uint16_t sport, dport;
+	uint32_t fin_seq;
 	tcp_sock_init_data init_data;
 	std::vector<derand_event> evts;
 	std::vector<derand_rec_sockcall> sockcalls;
@@ -256,7 +257,7 @@ public:
 	std::vector<u32> aeq;
 	#endif
 
-	Records() : broken(0), alert(0), recorder_id(-1) {}
+	Records() : broken(0), alert(0), recorder_id(-1), fin_seq(0) {}
 	void transform(); // transform raw data to final format
 	void order_sockcalls(); // order sockcalls according to their first appearance in evts
 	int dump(const char* filename = NULL);

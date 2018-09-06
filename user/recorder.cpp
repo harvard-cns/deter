@@ -151,6 +151,7 @@ int main()
 				if (finished){
 					res[i].broken |= rec->broken;
 					res[i].alert = rec->alert;
+					res[i].fin_seq = rec->pkt_idx.fin_seq;
 					// record the last idx_delta for jiffies
 					if (rec->jf.idx_delta > 0){
 						jiffies_rec jf_rec;

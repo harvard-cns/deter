@@ -100,6 +100,10 @@ int Records::dump(const char* filename){
 	if (!fwrite(&sip, sizeof(sip)+sizeof(dip)+sizeof(sport)+sizeof(dport), 1, fout))
 		goto fail_write;
 
+	// write fin_seq
+	if (!fwrite(&fin_seq, sizeof(fin_seq), 1, fout))
+		goto fail_write;
+
 	// write init_data
 	if (!fwrite(&init_data, sizeof(init_data), 1, fout))
 		goto fail_write;
@@ -193,6 +197,10 @@ int Records::read(const char* filename){
 
 	// read 4 tuples
 	if (!fread(&sip, sizeof(sip)+sizeof(dip)+sizeof(sport)+sizeof(dport), 1, fin))
+		goto fail_read;
+
+	// read fin_seq
+	if (!fread(&fin_seq, sizeof(fin_seq), 1, fin))
 		goto fail_read;
 
 	// read init_data
@@ -383,6 +391,7 @@ void Records::print(FILE* fout){
 	fprintf(fout, "alert: %x\n", alert);
 	fprintf(fout, "mode: %u\n", mode);
 	fprintf(fout, "%08x:%hu %08x:%hu\n", sip, sport, dip, dport);
+	fprintf(fout, "fin_seq: %u\n", fin_seq);
 
 	// count total bytes transferred
 	printf("total bytes sent: %lu\n", get_total_bytes_sent());
@@ -654,6 +663,7 @@ void Records::clear(){
 	mode = 0;
 	broken = 0;
 	alert = 0;
+	fin_seq = 0;
 	evts.clear();
 	sockcalls.clear();
 	jiffies.clear();
