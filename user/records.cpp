@@ -146,6 +146,12 @@ int Records::dump(const char* filename){
 		goto fail_write;
 	#endif
 
+	#if COLLECT_RX_STAMP
+	// write rsq
+	if (!dump_vector(rsq, fout))
+		goto fail_write;
+	#endif
+
 	// write effect_bool
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		if (!ebq[i].dump(fout))
@@ -235,6 +241,12 @@ int Records::read(const char* filename){
 		goto fail_read;
 	#endif
 
+	#if COLLECT_RX_STAMP
+	// read rsq
+	if (!read_vector(rsq, fin))
+		goto fail_read;
+	#endif
+
 	// read effect_bool
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		if (!ebq[i].read(fin))
@@ -284,6 +296,86 @@ uint64_t Records::get_total_bytes_sent(){
 			total_bytes += sc.sendmsg.size;
 	}
 	return total_bytes;
+}
+uint64_t Records::sample_timestamp(vector<uint64_t> &v, uint64_t th){
+	if (v.size() == 0)
+		return 0;
+	uint64_t size0 = 0, size1 = 0, size2 = 0;
+	{
+		int nSamp = 1;
+		uint64_t s = 0;
+		double cand_min = 0, cand_max = 1e99;
+		for (int64_t i = 1; i < (int64_t)v.size(); i++){
+			double this_max = double(v[i] + th - v[s]) / (i - s);
+			double this_min = (v[i] - v[s] > th) ? double(v[i] - th - v[s]) / (i - s) : 0;
+			if (this_min <= cand_max && this_max >= cand_min){ // overlap
+				cand_min = cand_min > this_min ? cand_min : this_min;
+				cand_max = cand_max < this_max ? cand_max : this_max;
+			}else { // new sample
+				nSamp++;
+				uint64_t rate = (uint64_t)((cand_max + cand_min) / 2);
+				int64_t delta_t = v[i] - (v[s] + rate * (i - 1 - s));
+				//printf("i= %ld, rate=%lu, delta_t=%ld\n", i, rate, delta_t);
+				uint64_t index_bit = nbit_dynamic_coding(i - s), rate_bit = nbit_dynamic_coding(rate, 0x0f0a), delta_bit = nbit_dynamic_coding(abs(delta_t), 0x0f0a) + 1;
+				//printf("%lu %lu %lu\n", index_bit, rate_bit, delta_bit);
+				size0 += index_bit + rate_bit + delta_bit;
+				#if 0
+				for (int j = s; j < i; j++)
+					printf("%lu - %lu = %ld\n", v[j], v[s] + rate * (j-s), v[j] - v[s] - rate*(j-s));
+				#endif
+				s = i;
+				cand_min = 0; cand_max = 1e99;
+			}
+		}
+		size0 /= 8;
+		printf("nSamp=%d size0=%lu\n", nSamp, size0);
+	}
+
+	#if 0
+	{
+		int nSamp = 1;
+		uint64_t s = 0;
+		double cand_min = 0, cand_max = 1e99;
+		for (int64_t i = 1; i < (int64_t)v.size(); i++){
+			double this_rate = double(v[i] - v[s]) / (i - s);
+			if (this_rate <= cand_max && this_rate >= cand_min){ // overlap
+				double this_max = double(v[i] + th - v[s]) / (i - s);
+				double this_min = (v[i] - v[s] > th) ? double(v[i] - th - v[s]) / (i - s) : 0;
+				cand_min = cand_min > this_min ? cand_min : this_min;
+				cand_max = cand_max < this_max ? cand_max : this_max;
+			}else { // new sample
+				nSamp++;
+				//printf("i = %ld delta_t = %ld\n", i-1, v[i-1] - v[s]);
+				uint64_t index_bit = nbit_dynamic_coding(i-1 - s), delta_bit = nbit_dynamic_coding(v[i-1] - v[s], 0x0f0a);
+				//printf("%lu %lu\n", index_bit, delta_bit);
+				size1 += index_bit + delta_bit;
+				#if 0
+				for (int j = s; j <= i-1; j++)
+					printf("%lu - %.1lf = %.1lf\n", v[j], v[s] + double(v[i-1]-v[s])/(i-1-s)* (j-s), v[j] - v[s] - double(v[i-1]-v[s])/(i-1-s)*(j-s));
+				#endif
+				s = i-1;
+				cand_min = (v[i] - v[s] > th) ? double(v[i] - th - v[s]) / (i - s) : 0;
+				cand_max = double(v[i] + th - v[s]) / (i - s);
+			}
+		}
+		size1 /= 8;
+		printf("nSamp=%d size1=%lu\n", nSamp, size1);
+	}
+	#endif
+
+	#if 0
+	{
+		for (int64_t i = 1; i < (int64_t)v.size(); i++){
+			int nbit = nbit_dynamic_coding(v[i]-v[i-1]);
+			size2 += nbit;
+			//printf("%lu %lu %u\n", v[i], v[i] - v[i-1], nbit);
+		}
+		size2 /= 8;
+		printf("size2 = %lu\n", size2);
+	}
+	#endif
+
+    return 0;
 }
 
 void Records::print(FILE* fout){
@@ -376,7 +468,13 @@ void Records::print(FILE* fout){
 	#if COLLECT_TX_STAMP
 	fprintf(fout, "%lu tsq:\n", tsq.size());
 	for (int64_t i = 0; i < tsq.size(); i++)
-		fprintf(fout, "%d\n", tsq[i]);
+		fprintf(fout, "%u %u\n", tsq[i], (tsq[i] - (i?tsq[i-1]:0)) / 1000);
+	#endif
+
+	#if COLLECT_RX_STAMP
+	fprintf(fout, "%lu rsq:\n", rsq.size());
+	for (int64_t i = 0; i < rsq.size(); i++)
+		fprintf(fout, "%u\n", rsq[i]);
 	#endif
 
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
@@ -567,6 +665,9 @@ void Records::clear(){
 	#if COLLECT_TX_STAMP
 	tsq.clear();
 	#endif
+	#if COLLECT_RX_STAMP
+	rsq.clear();
+	#endif
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		ebq[i].clear();
 	#if DERAND_DEBUG
@@ -598,7 +699,25 @@ string get_sockcall_key(derand_rec_sockcall &sc){
 	return res;
 }
 
+#if COLLECT_TX_STAMP
+uint64_t Records::tx_stamp_size(){
+	vector<uint64_t> v;
+	for (auto x : tsq)
+		v.push_back(x / 1000);
+	return sample_timestamp(v, 50); // 100-nanosecond
+}
+#endif
+#if COLLECT_RX_STAMP
+uint64_t Records::rx_stamp_size(){
+	vector<uint64_t> v;
+	for (auto x : rsq)
+		v.push_back(x / 1000);
+	return sample_timestamp(v, 50); // 100-nanosecond
+}
+#endif
+
 void Records::print_raw_storage_size(){
+	uint64_t this_size = 0;
 	uint64_t size = 0;
 	size += sizeof(init_data);
 	printf("init_data: %lu\n", sizeof(init_data));
@@ -622,6 +741,16 @@ void Records::print_raw_storage_size(){
 		size += ebq[i].raw_storage_size();
 		printf("ebq[%d]: %lu\n", i, ebq[i].raw_storage_size());
 	}
+	#if COLLECT_TX_STAMP
+	this_size = tx_stamp_size();
+	size += this_size;
+	printf("tx_stamp: %lu\n", this_size);
+	#endif
+	#if COLLECT_RX_STAMP
+	this_size = rx_stamp_size();
+	size += this_size;
+	printf("rx_stamp: %lu\n", this_size);
+	#endif
 	printf("total: %lu\n", size);
 }
 
@@ -806,6 +935,14 @@ uint64_t Records::compressed_sockcall_size(){
 	return min(this_size1, this_size2);
 }
 
+uint64_t Records::compressed_memory_allocated_size(){
+	uint64_t res = 0;
+	for (auto it : memory_allocated){
+		res += (1 + nbit_dynamic_coding(abs(it.v_delta))) + nbit_dynamic_coding(it.idx_delta);
+	}
+	return res / 8;
+}
+
 derand_rec_sockcall* Records::evt_get_sc(derand_event *evt){
 	return &sockcalls[get_sockcall_idx(evt->type)];
 }
@@ -838,8 +975,11 @@ void Records::print_compressed_storage_size(){
 	printf("jiffies: %lu\n",  this_size);
 	size += mpq.raw_storage_size();
 	printf("mpq: %lu\n", mpq.raw_storage_size());
-	size += sizeof(memory_allocated_rec) * memory_allocated.size();
-	printf("memory_allocated: %lu\n", sizeof(memory_allocated_rec) * memory_allocated.size());
+	{
+		this_size = compressed_memory_allocated_size();
+		size += this_size;
+		printf("memory_allocated: %lu\n", this_size);
+	}
 	{
 		uint64_t jiffies_size = 0, us_size = 0;
 		// jiffies should be mergable with jiffies without any extra overhead.
@@ -857,7 +997,8 @@ void Records::print_compressed_storage_size(){
 			if (i == 0)
 				us_bits += 32;
 			else
-				us_bits += nbit_dynamic_coding(mstamp[i].stamp_us - mstamp[i-1].stamp_us);
+				us_bits += nbit_dynamic_coding(mstamp[i].stamp_us - mstamp[i-1].stamp_us + 1, 0x2f1f0f070301);
+			//printf("%u %u %u\n", mstamp[i].stamp_us, mstamp[i].stamp_us - mstamp[i-1].stamp_us, nbit_dynamic_coding(mstamp[i].stamp_us - mstamp[i-1].stamp_us + 1, 0x2f1f0f070301));
 			#else
 			if (i == 0 || mstamp[i].stamp_us - mstamp[i-1].stamp_us >= 15)
 				us_bits += 4 + 32; // 4bit 0xf (meaning delta >= 15), 32bit delta
@@ -884,5 +1025,19 @@ void Records::print_compressed_storage_size(){
 		size += sz;
 		printf("ebq[%d]: %lu\n", i, sz);
 	}
+	#if COLLECT_TX_STAMP
+	{
+		this_size = tx_stamp_size();
+		size += this_size;
+		printf("tx_stamp: %lu\n", this_size);
+	}
+	#endif
+	#if COLLECT_RX_STAMP
+	{
+		this_size = rx_stamp_size();
+		size += this_size;
+		printf("rx_stamp: %lu\n", this_size);
+	}
+	#endif
 	printf("compressed total: %lu\n", size);
 }

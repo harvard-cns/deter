@@ -130,6 +130,9 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	#if COLLECT_TX_STAMP
 	rec->tsq.h = rec->tsq.t = 0;
 	#endif
+	#if COLLECT_RX_STAMP
+	rec->rsq.h = rec->rsq.t = 0;
+	#endif
 	if (mode == 0)
 		copy_from_server_sock(sk); // copy sock init data
 	else 
@@ -394,6 +397,15 @@ static void tasklet(struct sock *sk){
 /********************************************
  * monitor network action: drop & ecn
  *******************************************/
+#if COLLECT_RX_STAMP
+static inline void rx_stamp(struct derand_recorder *rec){
+	u64 clock = local_clock();
+	rec->rsq.v[get_rsq_idx(rec->rsq.t)] = clock;
+	wmb();
+	rec->rsq.t++;
+}
+#endif
+
 void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
 	u16 ipid, gap;
@@ -402,6 +414,10 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
 	if (!rec)
 		return;
+
+	#if COLLECT_RX_STAMP
+	rx_stamp(rec);
+	#endif
 
 	// if this packet ackes our fin, skip. ipid from the other side may not be consecutive after acking our fin
 	if (rec->pkt_idx.fin && ntohl(tcph->ack_seq) == rec->pkt_idx.fin_seq + 1)
@@ -595,7 +611,7 @@ static void record_general_event(const struct sock *sk, int loc, u64 data){
 #if COLLECT_TX_STAMP
 static void tx_stamp(const struct sk_buff *skb){
 	struct derand_recorder *rec = (struct derand_recorder*)skb->sk->recorder;
-	if (!rec)
+	if (!is_valid_recorder(rec))
 		return;
 	u64 clock = local_clock();
 	rec->tsq.v[get_tsq_idx(rec->tsq.t)] = clock;

@@ -116,6 +116,17 @@ static inline u32 get_tsq_idx(u32 i){
 }
 #endif
 
+#if COLLECT_RX_STAMP
+#define DERAND_RX_STAMP_PER_SOCK 512
+struct RxStampQ{
+	u32 h, t;
+	u32 v[DERAND_RX_STAMP_PER_SOCK];
+};
+static inline u32 get_rsq_idx(u32 i){
+	return i & (DERAND_RX_STAMP_PER_SOCK - 1);
+}
+#endif
+
 #define DERAND_EVENT_PER_SOCK 1024
 #define DERAND_SOCKCALL_PER_SOCK 256
 
@@ -149,6 +160,9 @@ struct derand_recorder{
 	#endif
 	#if COLLECT_TX_STAMP
 	struct TxStampQ tsq;
+	#endif
+	#if COLLECT_RX_STAMP
+	struct RxStampQ rsq;
 	#endif
 };
 

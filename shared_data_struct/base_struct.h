@@ -5,9 +5,10 @@
 
 #define DERAND_DEBUG 0
 #define ADVANCED_EVENT_ENABLE 0
-#define COLLECT_TX_STAMP 0
-#define GET_EVENT_STAMP 1
-#define GET_CWND 1
+#define COLLECT_TX_STAMP 1
+#define COLLECT_RX_STAMP 0
+#define GET_EVENT_STAMP 0
+#define GET_CWND 0
 
 /* Different types of socket calls' ID starts with different highest 4 bits */
 #define DERAND_SOCK_ID_BASE 100

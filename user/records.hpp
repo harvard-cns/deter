@@ -28,13 +28,13 @@ static uint32_t nbit_dynamic_coding(uint64_t x, uint64_t step = 0){
 			x -= (1lu<<w) - 1;
 		}
 	}else{
-		for (; x; w = (step & 0xf) + 1){
+		for (w = (step & 0xff) + 1; x; w = (step & 0xff) + 1){
 			nbit += w;
 			if (x <= (1lu << w) - 1)
 				break;
 			x -= (1lu << w) - 1;
-			if (step >> 4)
-				step >>= 4;
+			if (step >> 8)
+				step >>= 8;
 		}
 	}
 	return nbit;
@@ -244,7 +244,10 @@ public:
 	std::vector<uint8_t> siqq;
 	BitArray ebq[DERAND_EFFECT_BOOL_N_LOC];
 	#if COLLECT_TX_STAMP
-	std::vector<int32_t> tsq;
+	std::vector<uint32_t> tsq;
+	#endif
+	#if COLLECT_RX_STAMP
+	std::vector<uint32_t> rsq;
 	#endif
 	#if DERAND_DEBUG
 	std::vector<GeneralEvent> geq;
@@ -264,10 +267,18 @@ public:
 	uint64_t get_pkt_received();
 	uint64_t get_total_bytes_received();
 	uint64_t get_total_bytes_sent();
+	uint64_t sample_timestamp(std::vector<uint64_t> &v, uint64_t th);
+	#if COLLECT_TX_STAMP
+	uint64_t tx_stamp_size();
+	#endif
+	#if COLLECT_RX_STAMP
+	uint64_t rx_stamp_size();
+	#endif
 	void print_raw_storage_size();
 	derand_rec_sockcall* evt_get_sc(derand_event *evt);
 	uint64_t compressed_evt_size();
 	uint64_t compressed_sockcall_size();
+	uint64_t compressed_memory_allocated_size();
 	void print_compressed_storage_size();
 };
 
