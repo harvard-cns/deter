@@ -227,14 +227,14 @@ static inline void update_sc_t(struct derand_recorder *rec, int sc_id){
 	if (rec->sc_t != sc_id){
 		// This means there are other concurrent sockcall getting sc_id, and get a smaller sc_id than this
 		// We should wait for them to inc sc_t, before we inc sc_t. Otherwise the user recorder may record incomplete data for other sockcalls
-		volatile u32 *sc_t = &rec->sc_t;
+		atomic_t *sc_t = (atomic_t*)&rec->sc_t;
 		u32 cnt = 1;
-		for (;*sc_t != sc_id; cnt++){
+		for (;atomic_read(sc_t) != sc_id; cnt++){
 			if ((cnt & 0x0fffffff) == 0)
-				printk("long wait for sc_t: %u sc_id %d\n", *sc_t, sc_id);
+				printk("long wait for sc_t: %u sc_id %d\n", atomic_read(sc_t), sc_id);
 		}
 	}
-	rec->sc_t++;
+	atomic_inc((atomic_t*)&rec->sc_t);
 }
 static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	struct derand_recorder* rec = sk->recorder;
