@@ -185,7 +185,7 @@ int main()
 
 					if (res[i].alert)
 						printf("Alert %x!!! ", res[i].alert);
-					printf("%u %d fin:%u %s #drop %lu\n", rec->evt_t, rec->sockcall_id.counter, rec->pkt_idx.fin_seq, res[i].broken? "broken":"ok", res[i].dpq.size());
+					printf("%08x:%hu-%08x:%hu\t%u %d fin:%u %s #drop %lu\n", res[i].sip, res[i].sport, res[i].dip, res[i].dport, rec->evt_t, rec->sockcall_id.counter, rec->pkt_idx.fin_seq, res[i].broken? "broken":"ok", res[i].dpq.size());
 					res[i].dump();
 					res[i].clear();
 					res[i].recorder_id++;
