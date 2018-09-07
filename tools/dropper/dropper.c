@@ -17,22 +17,28 @@ static unsigned int dropper_fn(void *priv, struct sk_buff *skb, const struct nf_
 	struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
 	if (tcph->dest == 0x5ac3 || tcph->dest == 0x63ea || tcph->dest == 0x62ea || tcph->dest == 0x61ea){ // htons(50010), htons(60003), htons(60002), htons(60001)
 		if (bucket_sport[tcph->source]){
+			printk("drop the packet after 0-win, sport:%hu\n", ntohs(tcph->source));
 			bucket_sport[tcph->source] = false;
-			if ((random() & 0x7) == 0)// drop with probability
+			//if ((random() & 0x7) == 0)// drop with probability
 				return NF_DROP;
 		}
 		// if this is a zero window packet, drop the next packet (probably window update)
-		if (tcph->window == 0)
+		if (tcph->window == 0){
 			bucket_sport[tcph->source] = true;
+			printk("a Zero window\n");
+		}
 	}else if (tcph->source == 0x5ac3 || tcph->source == 0x63ea || tcph->source == 0x62ea || tcph->source == 0x61ea){ // htons(50010), htons(60003), htons(60002), htons(60001)
 		if (bucket_dport[tcph->dest]){
+			printk("drop the packet after 0-win, dport:%hu\n", ntohs(tcph->dest));
 			bucket_dport[tcph->dest] = false;
-			if ((random() & 0x7) == 0)// drop with probability
+			//if ((random() & 0x7) == 0)// drop with probability
 				return NF_DROP;
 		}
 		// if this is a zero window packet, drop the next packet (probably window update)
-		if (tcph->window == 0)
+		if (tcph->window == 0){
+			printk("a Zero window\n");
 			bucket_dport[tcph->dest] = true;
+		}
 	}
 	return NF_ACCEPT;
 }
@@ -40,7 +46,7 @@ static unsigned int dropper_fn(void *priv, struct sk_buff *skb, const struct nf_
 static struct nf_hook_ops dropper_nf_hook_ops = {
 	.hook = dropper_fn,
 	.pf = NFPROTO_IPV4,
-	.hooknum = NF_INET_LOCAL_OUT,
+	.hooknum = NF_INET_LOCAL_IN,
 	.priority = NF_IP_PRI_FIRST,
 };
 
