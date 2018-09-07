@@ -5,7 +5,9 @@
 #include <cstdio>
 #include <string>
 #include <cassert>
+#include <map>
 #include "base_struct.hpp"
+#include "coding.hpp"
 
 static uint32_t nbit_dynamic_coding(uint64_t x, uint64_t step = 0){
 	// Dynamically increase the nbits for recording x
@@ -38,6 +40,69 @@ static uint32_t nbit_dynamic_coding(uint64_t x, uint64_t step = 0){
 		}
 	}
 	return nbit;
+}
+
+static inline int get_nbit(uint64_t x){
+	return 64 - __builtin_clzl(x);
+}
+static uint32_t nbit_static_prefix_encoding(uint64_t x, int prefix_nbit){
+	if (x==0)
+		return prefix_nbit+1;
+	int nbit = get_nbit(x);
+	return nbit + prefix_nbit;
+}
+
+// format:
+// | huffman coding of nbit | actual bits that represents the value |
+// Use the first 'first_n' elements to build the huffman coding
+// return total bits
+static uint64_t nbit_huffman_prefix_encoding(std::vector<uint64_t> x, int first_n){
+	uint64_t res = 0;
+	std::vector<uint64_t> freq(65); // frequency of each nbit
+	for (int i = 0; i < first_n && i < (int)x.size(); i++)
+		freq[get_nbit(x[i])]++;
+	auto coding = huffman(freq);
+	#if 0
+	for (int i = 0; i < 64; i++)
+		printf("%d: %lu %u\n", i, freq[i], coding[i].nbit);
+	#endif
+	for (int i = 0; i < (int)x.size(); i++){
+		int nbit = get_nbit(x[i]);
+		res += nbit + coding[nbit].nbit;
+		//printf("%lu: %d+%d %lu\n", x[i], coding[nbit].nbit, nbit, res);
+	}
+	for (int i = 0; i < (int)coding.size(); i++){
+		if (freq[i] == 0)
+			continue;
+		res += 5 + coding[i].nbit; // 5 bit coding length, 32 bit coding
+	}
+	return res;
+}
+
+static uint64_t nbit_huffman_encoding(std::vector<uint64_t> x, int first_n){
+	uint64_t res = 0;
+	std::map<uint64_t, uint64_t> freq;
+	for (int i = 0; i < first_n && i < (int)x.size(); i++)
+		freq[x[i]]++;
+	std::vector<uint64_t> a;
+	for (auto &it : freq){
+		a.push_back(it.second);
+		it.second = a.size() - 1;
+	}
+	auto coding = huffman(a);
+	#if 0
+	for (auto it : freq){
+		printf("%lu: %lu %u\n", it.first, a[it.second], coding[it.second].nbit);
+	}
+	#endif
+	for (int i = 0; i < (int)x.size(); i++){
+		int nbit = coding[freq[x[i]]].nbit;
+		res += nbit;
+		//printf("%lu: %d+%d\n", x[i], coding[nbit].nbit, nbit);
+	}
+	for (int i = 0; i < (int)coding.size(); i++)
+		res += 5 + 32; // 5 bit coding length, 32 bit coding
+	return res;
 }
 
 struct BitArray{
@@ -262,6 +327,7 @@ public:
 	void order_sockcalls(); // order sockcalls according to their first appearance in evts
 	int dump(const char* filename = NULL);
 	int read(const char* filename);
+	void print_meta(FILE *fout = stdout);
 	void print(FILE* fout = stdout);
 	void print_init_data(FILE* fout = stdout);
 	void clear();
@@ -280,6 +346,7 @@ public:
 	uint64_t compressed_evt_size();
 	uint64_t compressed_sockcall_size();
 	uint64_t compressed_memory_allocated_size();
+	uint64_t compressed_mstamp_size();
 	void print_compressed_storage_size();
 };
 

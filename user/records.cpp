@@ -3,6 +3,7 @@
 #include <cmath>
 #include <map>
 #include "records.hpp"
+#include "coding.hpp"
 
 using namespace std;
 
@@ -306,9 +307,7 @@ uint64_t Records::get_total_bytes_sent(){
 	return total_bytes;
 }
 uint64_t Records::sample_timestamp(vector<uint64_t> &v, uint64_t th){
-	if (v.size() == 0)
-		return 0;
-	uint64_t size0 = 0, size1 = 0, size2 = 0;
+	uint64_t size0 = 0, size1 = 0, size2 = 0, size3 = 0, size4 = 0;
 	{
 		int nSamp = 1;
 		uint64_t s = 0;
@@ -324,7 +323,7 @@ uint64_t Records::sample_timestamp(vector<uint64_t> &v, uint64_t th){
 				uint64_t rate = (uint64_t)((cand_max + cand_min) / 2);
 				int64_t delta_t = v[i] - (v[s] + rate * (i - 1 - s));
 				//printf("i= %ld, rate=%lu, delta_t=%ld\n", i, rate, delta_t);
-				uint64_t index_bit = nbit_dynamic_coding(i - s), rate_bit = nbit_dynamic_coding(rate, 0x0f0a), delta_bit = nbit_dynamic_coding(abs(delta_t), 0x0f0a) + 1;
+				uint64_t index_bit = nbit_dynamic_coding(i - s), rate_bit = nbit_dynamic_coding(rate, 0x1f0f0a), delta_bit = nbit_dynamic_coding(abs(delta_t), 0x1f0f0a) + 1;
 				//printf("%lu %lu %lu\n", index_bit, rate_bit, delta_bit);
 				size0 += index_bit + rate_bit + delta_bit;
 				#if 0
@@ -336,57 +335,74 @@ uint64_t Records::sample_timestamp(vector<uint64_t> &v, uint64_t th){
 			}
 		}
 		size0 /= 8;
-		printf("nSamp=%d size0=%lu\n", nSamp, size0);
+		printf("\ttx_stamp size, sample, dynamic: nSamp: %d size: %lu\n", nSamp, size0);
 	}
 
-	#if 0
+	#if 1
 	{
 		int nSamp = 1;
 		uint64_t s = 0;
 		double cand_min = 0, cand_max = 1e99;
+		vector<uint64_t> v_index, v_rate, v_delta;
 		for (int64_t i = 1; i < (int64_t)v.size(); i++){
-			double this_rate = double(v[i] - v[s]) / (i - s);
-			if (this_rate <= cand_max && this_rate >= cand_min){ // overlap
-				double this_max = double(v[i] + th - v[s]) / (i - s);
-				double this_min = (v[i] - v[s] > th) ? double(v[i] - th - v[s]) / (i - s) : 0;
+			double this_max = double(v[i] + th - v[s]) / (i - s);
+			double this_min = (v[i] - v[s] > th) ? double(v[i] - th - v[s]) / (i - s) : 0;
+			if (this_min <= cand_max && this_max >= cand_min){ // overlap
 				cand_min = cand_min > this_min ? cand_min : this_min;
 				cand_max = cand_max < this_max ? cand_max : this_max;
 			}else { // new sample
 				nSamp++;
-				//printf("i = %ld delta_t = %ld\n", i-1, v[i-1] - v[s]);
-				uint64_t index_bit = nbit_dynamic_coding(i-1 - s), delta_bit = nbit_dynamic_coding(v[i-1] - v[s], 0x0f0a);
-				//printf("%lu %lu\n", index_bit, delta_bit);
-				size1 += index_bit + delta_bit;
-				#if 0
-				for (int j = s; j <= i-1; j++)
-					printf("%lu - %.1lf = %.1lf\n", v[j], v[s] + double(v[i-1]-v[s])/(i-1-s)* (j-s), v[j] - v[s] - double(v[i-1]-v[s])/(i-1-s)*(j-s));
-				#endif
-				s = i-1;
-				cand_min = (v[i] - v[s] > th) ? double(v[i] - th - v[s]) / (i - s) : 0;
-				cand_max = double(v[i] + th - v[s]) / (i - s);
+				uint64_t rate = (uint64_t)((cand_max + cand_min) / 2);
+				int64_t delta_t = v[i] - (v[s] + rate * (i - 1 - s));
+				v_index.push_back(i-s);
+				v_rate.push_back(rate);
+				v_delta.push_back(delta_t);
+				s = i;
+				cand_min = 0; cand_max = 1e99;
 			}
 		}
+		size1 = nbit_huffman_prefix_encoding(v_index, 1024);
+		size1 += nbit_huffman_prefix_encoding(v_rate, 1024);
+		size1 += nbit_huffman_prefix_encoding(v_delta, 1024);
 		size1 /= 8;
-		printf("nSamp=%d size1=%lu\n", nSamp, size1);
+		printf("\ttx_stamp size, sample, huffman_prefix: nSamp: %d size: %lu\n", nSamp, size1);
 	}
 	#endif
 
-	#if 0
+	#if 1
 	{
 		for (int64_t i = 1; i < (int64_t)v.size(); i++){
-			int nbit = nbit_dynamic_coding(v[i]-v[i-1]);
+			int nbit = nbit_static_prefix_encoding(v[i]-v[i-1], 4);
 			size2 += nbit;
 			//printf("%lu %lu %u\n", v[i], v[i] - v[i-1], nbit);
 		}
 		size2 /= 8;
-		printf("size2 = %lu\n", size2);
+		printf("\ttx_stamp size, static_prefix: %lu\n", size2);
+	}
+	
+	// huffman prefix
+	{
+		vector<uint64_t> delta;
+		for (int64_t i = 1; i < (int64_t)v.size(); i++)
+			delta.push_back(v[i] - v[i-1]);
+		size3 = nbit_huffman_prefix_encoding(delta, 1024) / 8;
+		printf("\ttx_stamp size, huffman_prefix: %lu\n", size3);
+	}
+
+	// huffman
+	{
+		vector<uint64_t> delta;
+		for (int64_t i = 1; i < (int64_t)v.size(); i++)
+			delta.push_back(v[i] - v[i-1]);
+		size4 = nbit_huffman_encoding(delta, 99999999) / 8;
+		printf("\ttx_stamp size, huffman_encoding: %lu\n", size4);
 	}
 	#endif
 
     return 0;
 }
 
-void Records::print(FILE* fout){
+void Records::print_meta(FILE *fout){
 	fprintf(fout, "broken: %x\n", broken);
 	fprintf(fout, "alert: %x\n", alert);
 	fprintf(fout, "mode: %u\n", mode);
@@ -399,7 +415,8 @@ void Records::print(FILE* fout){
 
 	// count pkt received
 	printf("packets received: %lu\n", get_pkt_received());
-
+}
+void Records::print(FILE* fout){
 	fprintf(fout, "%lu sockcalls\n", sockcalls.size());
 	for (int i = 0; i < sockcalls.size(); i++){
 		derand_rec_sockcall &sc = sockcalls[i];
@@ -711,9 +728,14 @@ string get_sockcall_key(derand_rec_sockcall &sc){
 
 #if COLLECT_TX_STAMP
 uint64_t Records::tx_stamp_size(){
+	//return 0;
 	vector<uint64_t> v;
-	for (auto x : tsq)
-		v.push_back(x / 1000);
+	uint64_t delta = 0;
+	for (auto x : tsq){
+		while (v.size() && v.back() > (x+delta) / 100)
+			delta += 0x100000000l;
+		v.push_back((x+delta) / 100);
+	}
 	return sample_timestamp(v, 50); // 100-nanosecond
 }
 #endif
@@ -765,115 +787,41 @@ void Records::print_raw_storage_size(){
 }
 
 uint64_t Records::compressed_evt_size(){
-	#define PRINT_COMPRESSED 0
-	int thread_nbit = 1;
-	uint64_t this_size1 = 0, this_size2 = 0;
+	uint64_t this_size;
+	uint64_t this_size1 = 0, this_size2 = 0, this_size3 = 0;
+
 	{
-		uint64_t pkt_cnt = 0, sc_cnt = 0; // consecutive packet count, consecutive sockcall event
-		// | 2bit code | data (variable size) |
-		// if code == 00: data = # pkt before this evt (3bit (pkt_nbit_in_evt)) | event type (tasklet/timeout) (3bit)
-		// if code == 01: data = # pkt (6bit (pkt_nbit_general)) (range: 1 ~ 1<<pkt_nbit_general))
-		// if code == 10: data = # pkt before this sockcall (3bit (pkt_nbit_in_evt)) | # consecutive sockcall (3bit (sc_nbit))
-		// if code == 11: data = # pkt before this sockcall (3bit (pkt_nbit_in_evt)) | # consecutive sockcall (3bit (sc_nbit)) | thread_id (1bit)
-		int pkt_nbit_in_evt = 3, pkt_nbit_general = 6, sc_nbit = 3;
-		uint64_t last_thread_id = -1;
-		for (int i = 0; i < evts.size(); i++){
-
-			// deal with the packet preceeding this evt
-			pkt_cnt = i>0 ? (evts[i].seq - evts[i-1].seq - 1) : evts[i].seq;
-			uint64_t np = pkt_cnt; // number of pkt recorded with the evt
-			if (pkt_cnt >= (1<<pkt_nbit_in_evt)){
-				np = (1<<pkt_nbit_in_evt)-1;
-				pkt_cnt -= (1<<pkt_nbit_in_evt) - 1; // (1<<pkt_nbit_in_evt)-1 can be stored together with evt
-				this_size1 += ((pkt_cnt - 1) / (1<<pkt_nbit_general) + 1) * (2 + pkt_nbit_general); // roundup(pkt_cnt / 2^pkt_nbit_general) * bits
-				#if PRINT_COMPRESSED
-				for (int j = pkt_cnt; j > 0 ; j-=1<<pkt_nbit_general)
-					printf("01 %d\n", j >= (1<<pkt_nbit_general) ? 1<<pkt_nbit_general : j);
-				#endif
-			}
-
-			// deal with this evt
+		vector<int> e;
+		for (int i = 0, seq = 0; i < (int)evts.size(); i++){
+			for (; seq < evts[i].seq; seq++)
+				e.push_back(0);
+			seq++;
 			if (evt_is_sockcall(&evts[i])){
-				uint64_t this_thread_id = sockcalls[get_sockcall_idx(evts[i].type)].thread_id;
-				// if this is from a diff thread than the last sockcall, code = 11, and record thread_id
-				if (this_thread_id != last_thread_id)
-					this_size1 += thread_nbit;
-				// find consecutive sockcall from the same thread
-				for (sc_cnt = 1; 
-						i+1 < evts.size()
-						&& evt_is_sockcall(&evts[i+1])
-						&& evts[i+1].seq == evts[i].seq + 1 // consecutive sockcall events
-						&& sockcalls[get_sockcall_idx(evts[i+1].type)].thread_id == this_thread_id // from the same thread
-						&& sc_cnt < (1<<sc_nbit); 
-						i++, sc_cnt++);
-				this_size1 += 2 + pkt_nbit_in_evt + sc_nbit;
-				#if PRINT_COMPRESSED
-				if (last_thread_id == this_thread_id)
-					printf("10 %lu %lu\n", np, sc_cnt + 1);
-				else
-					printf("11 %lu %lu %lu\n", np, sc_cnt, this_thread_id);
-				#endif
-				last_thread_id = this_thread_id;
-			}else {
-				// other event
-				this_size1 += 2 + pkt_nbit_in_evt + 3;
-				#if PRINT_COMPRESSED
-				printf("00 %lu %u\n", np, evts[i].type);
-				#endif
+				e.push_back(100 + sockcalls[get_sockcall_idx(evts[i].type)].thread_id);
+			}else{ // other types of events
+				e.push_back(evts[i].type);
 			}
+		}
+		vector<uint64_t> lens;
+		for (int i = 0; i < (int)e.size(); i++){
+			uint64_t len = 1;
+			for (; i+1 < (int)e.size() && e[i] == e[i+1]; i++, len++);
+			lens.push_back(len);
+		}
+		for (int i = 0; i < (int)lens.size(); i++){
+			this_size1 += nbit_dynamic_coding(lens[i]);
 		}
 		this_size1 /= 8;
-	}
+		this_size = this_size1;
+		printf("\tevts: dynamic: %lu\n", this_size1);
 
-	{
-		// deal with pkt seq
-		vector<int> pkt_seq;
-		for (int i = 0, seq = 0; i < evts.size(); i++){
-			for (; seq < evts[i].seq; seq++)
-				pkt_seq.push_back(seq);
-			seq++;
-		}
-		for (int i = 0; i < pkt_seq.size(); i++){
-			// deal with non-pkt
-			int n_np = i > 0 ? pkt_seq[i]-pkt_seq[i-1]-1 : pkt_seq[i];
-			if (n_np > 0)
-				this_size2 += nbit_dynamic_coding(n_np);
-			// deal with pkt
-			int cnt = 1;
-			for (;i+1 < pkt_seq.size() && pkt_seq[i+1] == pkt_seq[i] + 1; i++)
-				cnt++;
-			if (cnt > 0)
-				this_size2 += nbit_dynamic_coding(cnt);
-		}
+		this_size2 = nbit_huffman_prefix_encoding(lens, 1024) / 8;
+		printf("\tevts: huffman_prefix: %lu\n", this_size2);
 
-		// deal with other non-pkt events
-		uint64_t last_thread_id = -1;
-		int sc_nbit = 3;
-		int sc_cnt = 0;
-		for (int i = 0; i < evts.size(); i++){
-			// deal with this evt
-			if (evt_is_sockcall(&evts[i])){
-				uint64_t this_thread_id = sockcalls[get_sockcall_idx(evts[i].type)].thread_id;
-				// if this is from a diff thread than the last sockcall, code = 11, and record thread_id
-				if (this_thread_id != last_thread_id)
-					this_size2 += thread_nbit; // 1 bit for a diff thread_id
-				// find consecutive sockcall from the same thread
-				for (sc_cnt = 1; 
-						i+1 < evts.size()
-						&& evt_is_sockcall(&evts[i+1])
-						&& sockcalls[get_sockcall_idx(evts[i+1].type)].thread_id == this_thread_id // from the same thread
-						//&& sc_cnt < (1<<sc_nbit)
-						;i++, sc_cnt++);
-				this_size2 += 1 + nbit_dynamic_coding(sc_cnt); // 1 bit for type 0: sockcall
-				last_thread_id = this_thread_id;
-			}else {
-				// other event
-				this_size2 += 1 + 3; // 1 bit for type 1: non-sockcall, 3 bit for type
-			}
-		}
-		this_size2 /= 8;
+		this_size3 = nbit_huffman_encoding(lens, 1024) / 8;
+		printf("\tevts: huffman_encoding: %lu\n", this_size3);
 	}
-	return min(this_size1, this_size2);
+	return this_size;
 }
 
 uint64_t Records::compressed_sockcall_size(){
@@ -953,6 +901,62 @@ uint64_t Records::compressed_memory_allocated_size(){
 	return res / 8;
 }
 
+uint64_t Records::compressed_mstamp_size(){
+	uint64_t this_size;
+	uint64_t this_size0 = 0, this_size1 = 0, this_size2 = 0;
+	{
+		uint64_t jiffies_size = 0, us_size = 0;
+		// jiffies should be mergable with jiffies without any extra overhead.
+		// stamp_us
+		uint64_t us_bits = 0;
+		for (int i = 0; i < mstamp.size(); i++){
+			#if 1
+			if (i == 0)
+				us_bits += 32;
+			else
+				us_bits += nbit_dynamic_coding(mstamp[i].stamp_us - mstamp[i-1].stamp_us + 1, 0x2f1f0f070301);
+			//printf("%u %u %u\n", mstamp[i].stamp_us, mstamp[i].stamp_us - mstamp[i-1].stamp_us, nbit_dynamic_coding(mstamp[i].stamp_us - mstamp[i-1].stamp_us + 1, 0x2f1f0f070301));
+			#else
+			if (i == 0 || mstamp[i].stamp_us - mstamp[i-1].stamp_us >= 15)
+				us_bits += 4 + 32; // 4bit 0xf (meaning delta >= 15), 32bit delta
+			else
+				us_bits += 4; // 4bit delta
+			#endif
+		}
+		us_size = us_bits/8;
+		this_size0 = jiffies_size + us_size + nbit_dynamic_coding(mstamp.size()) / 8;
+		this_size = this_size0;
+		printf("\tmstamp size, dynamic: %lu\n", this_size0);
+	}
+
+	// use huffman prefix
+	{
+		vector<uint64_t> delta;
+		for (int i = 1; i < mstamp.size(); i++)
+			delta.push_back(mstamp[i].stamp_us - mstamp[i-1].stamp_us);
+		this_size1 = nbit_huffman_prefix_encoding(delta, 1024) / 8;
+		this_size1 += nbit_dynamic_coding(mstamp.size()) / 8;
+		if (this_size1 < this_size)
+			this_size = this_size1;
+		printf("\tmstamp size, huffman_prefix: %lu\n", this_size1);
+	}
+
+	// huffman
+	{
+		vector<uint64_t> delta;
+		for (int i = 1; i < mstamp.size(); i++)
+			delta.push_back(mstamp[i].stamp_us - mstamp[i-1].stamp_us);
+		this_size2 = nbit_huffman_encoding(delta, 99999999) / 8;
+		this_size2 += nbit_dynamic_coding(mstamp.size()) / 8;
+		#if 0
+		if (this_size2 < this_size)
+			this_size = this_size2;
+		#endif
+		printf("\tmstamp size, huffman_encoding: %lu\n", this_size2);
+	}
+	return this_size;
+}
+
 derand_rec_sockcall* Records::evt_get_sc(derand_event *evt){
 	return &sockcalls[get_sockcall_idx(evt->type)];
 }
@@ -991,36 +995,10 @@ void Records::print_compressed_storage_size(){
 		printf("memory_allocated: %lu\n", this_size);
 	}
 	{
-		uint64_t jiffies_size = 0, us_size = 0;
-		// jiffies should be mergable with jiffies without any extra overhead.
-		#if 0
-		// stamp_jiffies
-		for (int i = 0; i < mstamp.size(); i++){
-			if (i == 0 || mstamp[i].stamp_jiffies != mstamp[i-1].stamp_jiffies)
-				jiffies_size += 8; // 32bit jiffies delta, 32bit idx delta
-		}
-		#endif
-		// stamp_us
-		uint64_t us_bits = 0;
-		for (int i = 0; i < mstamp.size(); i++){
-			#if 1
-			if (i == 0)
-				us_bits += 32;
-			else
-				us_bits += nbit_dynamic_coding(mstamp[i].stamp_us - mstamp[i-1].stamp_us + 1, 0x2f1f0f070301);
-			//printf("%u %u %u\n", mstamp[i].stamp_us, mstamp[i].stamp_us - mstamp[i-1].stamp_us, nbit_dynamic_coding(mstamp[i].stamp_us - mstamp[i-1].stamp_us + 1, 0x2f1f0f070301));
-			#else
-			if (i == 0 || mstamp[i].stamp_us - mstamp[i-1].stamp_us >= 15)
-				us_bits += 4 + 32; // 4bit 0xf (meaning delta >= 15), 32bit delta
-			else
-				us_bits += 4; // 4bit delta
-			#endif
-		}
-		us_size = us_bits/8;
-		this_size = jiffies_size + us_size + nbit_dynamic_coding(mstamp.size()) / 8;
 		#if 1
+		this_size = compressed_mstamp_size();
 		size += this_size;
-		printf("mstamp: jiffies: %lu us: %lu total: %lu\n", jiffies_size, us_size, this_size);
+		printf("mstamp: jiffies: %lu us: %lu total: %lu\n", 0l, this_size, this_size);
 		#else
 		printf("mstamp: NOT counted\n");
 		#endif
