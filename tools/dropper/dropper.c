@@ -3,8 +3,8 @@
 #include <linux/netfilter_ipv4.h>
 #include <net/tcp.h>
 
-bool bucket_sport[65536];
-bool bucket_dport[65536];
+int bucket_sport[65536];
+int bucket_dport[65536];
 
 static inline int random(void){
 	int res;
@@ -16,28 +16,34 @@ static unsigned int dropper_fn(void *priv, struct sk_buff *skb, const struct nf_
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
 	if (tcph->dest == 0x5ac3 || tcph->dest == 0x63ea || tcph->dest == 0x62ea || tcph->dest == 0x61ea){ // htons(50010), htons(60003), htons(60002), htons(60001)
-		if (bucket_sport[tcph->source]){
+		if (bucket_sport[tcph->source] > 0){
 			printk("drop the packet after 0-win, sport:%hu\n", ntohs(tcph->source));
-			bucket_sport[tcph->source] = false;
-			//if ((random() & 0x7) == 0)// drop with probability
-				return NF_DROP;
+			bucket_sport[tcph->source]--;
+			if (bucket_sport[tcph->source] == 0)
+				bucket_sport[tcph->source] = -1; // no more drops for this connection
+			return NF_DROP;
 		}
 		// if this is a zero window packet, drop the next packet (probably window update)
 		if (tcph->window == 0){
-			bucket_sport[tcph->source] = true;
-			printk("a Zero window\n");
+			if (bucket_sport[tcph->source] == 0 && (random() & 0x7) == 0){// drop with probability
+				bucket_sport[tcph->source] = 3;
+				printk("a Zero window\n");
+			}
 		}
 	}else if (tcph->source == 0x5ac3 || tcph->source == 0x63ea || tcph->source == 0x62ea || tcph->source == 0x61ea){ // htons(50010), htons(60003), htons(60002), htons(60001)
-		if (bucket_dport[tcph->dest]){
+		if (bucket_dport[tcph->dest] > 0){
 			printk("drop the packet after 0-win, dport:%hu\n", ntohs(tcph->dest));
-			bucket_dport[tcph->dest] = false;
-			//if ((random() & 0x7) == 0)// drop with probability
-				return NF_DROP;
+			bucket_dport[tcph->dest]--;
+			if (bucket_dport[tcph->dest] == 0)
+				bucket_dport[tcph->dest] = -1; // no more drops for this connection
+			return NF_DROP;
 		}
 		// if this is a zero window packet, drop the next packet (probably window update)
 		if (tcph->window == 0){
-			printk("a Zero window\n");
-			bucket_dport[tcph->dest] = true;
+			if (bucket_dport[tcph->dest] == 0 && (random() & 0x7) == 0){// drop with probability
+				bucket_dport[tcph->dest] = 3;
+				printk("a Zero window\n");
+			}
 		}
 	}
 	return NF_ACCEPT;
