@@ -254,6 +254,8 @@ static inline const char* get_ae_name(u8 type, char* buf){
 		case 28: sprintf(buf, "tcp_new_space");break;
 		case 29: sprintf(buf, "tcp_should_expand_sndbuf");break;
 		case 30: sprintf(buf, "tcp_data_snd_check");break;
+		case 31: sprintf(buf, "tcp_fastretrans_alert");break;
+		case 32: sprintf(buf, "tcp_time_to_recover");break;
 		case 256-1: sprintf(buf, "#read_jiffies");break;
 		case 256-2: sprintf(buf, "#under_memory_pressure");break;
 		case 256-3: sprintf(buf, "#memory_allocated");break;
