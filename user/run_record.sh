@@ -1,6 +1,7 @@
 source ip_util.sh
 
 dstip=0.0.0.0
+ndstip=0.0.0.0
 do_tcpdump=0
 while [[ $# -gt 0 ]]
 do
@@ -10,12 +11,18 @@ do
 		echo "usage: bash run_record.sh [OPTION]..."
 		echo "options:"
 		echo "-d, --dstip             specify the dstip of the connection to record"
+		echo "-n, --ndstip            specify the dstip NOT to record"
 		echo "-p, --tcpdump           do tcpdump"
 		shift
 		exit 0
 	;;
 	-d|--dstip)
 		dstip=$2
+		shift
+		shift
+	;;
+	-n|--ndstip)
+		ndstip=$2
 		shift
 		shift
 	;;
@@ -30,6 +37,7 @@ do
 done
 
 dstip_int=$(ip_to_int $dstip)
+ndstip_int=$(ip_to_int $ndstip)
 
 if [ $do_tcpdump -eq 1 ]; then
 	cd ../pcap
@@ -38,7 +46,7 @@ if [ $do_tcpdump -eq 1 ]; then
 fi
 
 cd ../kmod
-sudo insmod derand_recorder.ko dstip=$dstip_int
+sudo insmod derand_recorder.ko dstip=$dstip_int ndstip=$ndstip_int
 
 cd ../user
 sudo ./recorder
