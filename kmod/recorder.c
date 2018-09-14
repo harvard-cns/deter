@@ -13,17 +13,22 @@
 #include "record_user_share.h"
 #include "logger.h"
 
-u32 dstip;
-module_param(dstip, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+u64 dstip;
+u64 ndstip;
+module_param(dstip, long, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 MODULE_PARM_DESC(dstip, "A dstip to monitor");
+module_param(ndstip, long, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+MODULE_PARM_DESC(ndstip, "A dstip NOT to monitor");
 
 static int __init record_init(void)
 {
-	printk("dstip to monitor: 0x%08x\n", dstip);
+	printk("dstip to monitor: 0x%08lx\n", dstip);
+	printk("dstip NOT to monitor: 0x%08lx\n", ndstip);
 	mon_dstip = htonl(dstip); // mon_dstip is in record_ops.c
+	mon_ndstip = htonl(ndstip);
 
 	// create record_ctrl data
-	if (create_record_ctrl(32))
+	if (create_record_ctrl(64))
 		goto fail_create_ctrl;
 
 	// expose data to user space

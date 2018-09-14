@@ -7,6 +7,7 @@
 #include "logger.h"
 
 u32 mon_dstip = 0;
+u32 mon_ndstip = 0;
 
 static inline int is_valid_recorder(struct derand_recorder *rec){
 	int idx = rec - (struct derand_recorder*)record_ctrl.addr;
@@ -147,7 +148,7 @@ out:
 static void server_recorder_create(struct sock *sk, struct sk_buff *skb){
 	uint16_t sport = ntohs(inet_sk(sk)->inet_sport);
 	u32 dip = inet_sk(sk)->inet_daddr;
-	if ((mon_dstip == 0 || dip == mon_dstip) && ((sport >= 60000 && sport <= 60003) || sport == 50010)){
+	if (dip != mon_ndstip && (mon_dstip == 0 || dip == mon_dstip) && ((sport >= 60000 && sport <= 60003) || sport == 50010)){
 		printk("server dip = %08x, sport = %hu, dport = %hu, creating recorder\n", ntohl(dip), ntohs(inet_sk(sk)->inet_sport), ntohs(inet_sk(sk)->inet_dport));
 		recorder_create(sk, skb, 0);
 	}
@@ -155,7 +156,7 @@ static void server_recorder_create(struct sock *sk, struct sk_buff *skb){
 static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 	uint16_t dport = ntohs(inet_sk(sk)->inet_dport);
 	u32 dip = inet_sk(sk)->inet_daddr;
-	if ((mon_dstip == 0 || dip == mon_dstip) && ((dport >= 60000 && dport <= 60003) || dport == 50010)){
+	if (dip != mon_ndstip && (mon_dstip == 0 || dip == mon_dstip) && ((dport >= 60000 && dport <= 60003) || dport == 50010)){
 	//if (inet_sk(sk)->inet_dport == 0x8913){ // port 5001
 		printk("client dip = %08x, sport = %hu, dport = %hu, creating recorder\n", ntohl(dip), inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		recorder_create(sk, skb, 1);
