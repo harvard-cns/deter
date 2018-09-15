@@ -76,10 +76,10 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	// create derand_recorder
 	struct derand_recorder *rec = derand_alloc_mem();
 	if (!rec){
-		printk("[recorder_create] sport = %hu, dport = %hu, fail to create recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, record_ctrl.top);
+		printk("[recorder_create] sport = %hu, dport = %hu, fail to create recorder. top=%d\n", ntohs(inet_sk(sk)->inet_sport), ntohs(inet_sk(sk)->inet_dport), record_ctrl.top);
 		goto out;
 	}
-	printk("[recorder_create] sport = %hu, dport = %hu, succeed to create recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, record_ctrl.top);
+	printk("[recorder_create] sport = %hu, dport = %hu, succeed to create recorder. top=%d\n", ntohs(inet_sk(sk)->inet_sport), ntohs(inet_sk(sk)->inet_dport), record_ctrl.top);
 	sk->recorder = rec;
 
 	// set broken to 0;
@@ -114,6 +114,9 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	rec->evt_h = rec->evt_t = 0;
 	rec->sc_h = rec->sc_t = 0;
 	rec->dpq.h = rec->dpq.t = 0;
+	#if GET_RX_PKT_IDX
+	rec->rpq.h = rec->rpq.t = 0;
+	#endif
 	rec->jf.h = rec->jf.t = rec->jf.idx_delta = rec->jf.last_jiffies = 0;
 	rec->mpq.h = rec->mpq.t = 0;
 	rec->maq.h = rec->maq.t = rec->maq.idx_delta = rec->maq.last_v = 0;
@@ -158,7 +161,7 @@ static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 	u32 dip = inet_sk(sk)->inet_daddr;
 	if (dip != mon_ndstip && (mon_dstip == 0 || dip == mon_dstip) && ((dport >= 60000 && dport <= 60003) || dport == 50010)){
 	//if (inet_sk(sk)->inet_dport == 0x8913){ // port 5001
-		printk("client dip = %08x, sport = %hu, dport = %hu, creating recorder\n", ntohl(dip), inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
+		printk("client dip = %08x, sport = %hu, dport = %hu, creating recorder\n", ntohl(dip), ntohs(inet_sk(sk)->inet_sport), ntohs(inet_sk(sk)->inet_dport));
 		recorder_create(sk, skb, 1);
 	}
 }
@@ -435,6 +438,11 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 
 	gap = get_pkt_idx_gap(&rec->pkt_idx, ipid);
 	idx = rec->pkt_idx.idx;
+	#if GET_RX_PKT_IDX
+	rec->rpq.v[get_rx_pkt_q_idx(rec->rpq.t)] = ipid;
+	wmb();
+	rec->rpq.t++;
+	#endif
 
 	// record drops
 	for (i = 1; i < gap; i++){
