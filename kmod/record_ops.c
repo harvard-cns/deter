@@ -611,8 +611,11 @@ static void record_general_event(const struct sock *sk, int loc, u64 data){
 
 #if COLLECT_TX_STAMP
 static void tx_stamp(const struct sk_buff *skb){
-	struct derand_recorder *rec = (struct derand_recorder*)skb->sk->recorder;
-	if (!rec && !is_valid_recorder(rec))
+	struct sock* sk = skb->sk;
+	if (!sk)
+		return;
+	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
+	if (!rec || !is_valid_recorder(rec))
 		return;
 	u64 clock = local_clock();
 	rec->tsq.v[get_tsq_idx(rec->tsq.t)] = clock;
