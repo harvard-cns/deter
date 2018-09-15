@@ -3,6 +3,9 @@
 
 #include "base_struct.h"
 #include "tcp_sock_init_data.h"
+
+#define N_RECORDER 93
+
 /***********************************
  * drop
  **********************************/
@@ -127,8 +130,8 @@ static inline u32 get_rsq_idx(u32 i){
 }
 #endif
 
-#define DERAND_EVENT_PER_SOCK 1024
-#define DERAND_SOCKCALL_PER_SOCK 256
+#define DERAND_EVENT_PER_SOCK 2048
+#define DERAND_SOCKCALL_PER_SOCK 512
 
 struct derand_recorder{
 	u32 broken, alert;
