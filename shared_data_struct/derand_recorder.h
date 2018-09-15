@@ -16,6 +16,17 @@ struct DropQ{
 };
 #define get_drop_q_idx(i) ((i) & (DERAND_DROP_PER_SOCK - 1))
 
+#if GET_RX_PKT_IDX
+#define DERAND_RX_PKT_PER_SOCK 512
+struct RxPktQ{
+	u32 h, t;
+	u32 v[DERAND_RX_PKT_PER_SOCK];
+};
+static inline u32 get_rx_pkt_q_idx(u32 i){
+	return i & (DERAND_RX_PKT_PER_SOCK - 1);
+}
+#endif
+
 /************************************
  * jiffies
  ***********************************/
@@ -148,6 +159,9 @@ struct derand_recorder{
 	struct derand_rec_sockcall sockcalls[DERAND_SOCKCALL_PER_SOCK]; // sockcall
 	struct PktIdx pkt_idx; // maintain pkt idx
 	struct DropQ dpq; // drop
+	#if GET_RX_PKT_IDX
+	struct RxPktQ rpq; // rx packet
+	#endif
 	struct jiffies_q jf; // jiffies
 	struct memory_pressure_q mpq; // memory pressure
 	struct memory_allocated_q maq; // memory_allocated

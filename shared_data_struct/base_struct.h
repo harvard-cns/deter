@@ -9,6 +9,7 @@
 #define COLLECT_RX_STAMP 0
 #define GET_EVENT_STAMP 0
 #define GET_CWND 0
+#define GET_RX_PKT_IDX 1
 
 /* Different types of socket calls' ID starts with different highest 4 bits */
 #define DERAND_SOCK_ID_BASE 100
