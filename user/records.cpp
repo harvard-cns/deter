@@ -281,10 +281,13 @@ fail_read:
 }
 
 uint64_t Records::get_pkt_received(){
+	#if 0
 	uint64_t pkt_rcvd = 0;
 	for (int i = 0; i < evts.size(); i++)
 		pkt_rcvd += i>0 ? (evts[i].seq - evts[i-1].seq - 1) : evts[i].seq;
 	return pkt_rcvd;
+	#endif
+	return evts.back().seq + 1 - evts.size();
 }
 
 uint64_t Records::get_total_bytes_received(){
