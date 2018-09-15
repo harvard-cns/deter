@@ -174,6 +174,12 @@ int Records::dump(const char* filename){
 		goto fail_write;
 	#endif
 
+	#if GET_RX_PKT_IDX
+	// write drop
+	if (!dump_vector(rpq, fout))
+		goto fail_write;
+	#endif
+
 	fclose(fout);
 	return 0;
 fail_write:
@@ -270,6 +276,12 @@ int Records::read(const char* filename){
 	#if ADVANCED_EVENT_ENABLE
 	// read aeq
 	if (!read_vector(aeq, fin))
+		goto fail_read;
+	#endif
+
+	#if GET_RX_PKT_IDX
+	// read drop
+	if (!read_vector(rpq, fin))
 		goto fail_read;
 	#endif
 
@@ -466,6 +478,12 @@ void Records::print(FILE* fout){
 	fprintf(fout, "%lu drops\n", dpq.size());
 	for (uint32_t i = 0; i < dpq.size(); i++)
 		fprintf(fout, "%u\n", dpq[i]);
+
+	#if GET_RX_PKT_IDX
+	fprintf(fout, "%lu rpq\n", rpq.size());
+	for (uint32_t i = 0; i < rpq.size(); i++)
+		fprintf(fout, "%u\n", rpq[i]);
+	#endif
 
 	fprintf(fout, "%lu new jiffies\n", jiffies.size());
 	if (jiffies.size() > 0){
@@ -686,6 +704,10 @@ void Records::clear(){
 	fin_seq = 0;
 	evts.clear();
 	sockcalls.clear();
+	dpq.clear();
+	#if GET_RX_PKT_IDX
+	rpq.clear();
+	#endif
 	jiffies.clear();
 	mpq.clear();
 	memory_allocated.clear();

@@ -321,6 +321,9 @@ public:
 	#if ADVANCED_EVENT_ENABLE
 	std::vector<u32> aeq;
 	#endif
+	#if GET_RX_PKT_IDX
+	std::vector<u32> rpq;
+	#endif
 
 	Records() : broken(0), alert(0), recorder_id(-1), fin_seq(0) {}
 	void transform(); // transform raw data to final format

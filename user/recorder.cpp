@@ -144,6 +144,12 @@ int main()
 				}
 				rec->rsq.h = j;
 				#endif
+				#if GET_RX_PKT_IDX
+				res[i].broken |= (rec->rpq.h + DERAND_RX_PKT_PER_SOCK < rec->rpq.t) << (12 + DERAND_EFFECT_BOOL_N_LOC);
+				for (j = rec->rpq.h; j < rec->rpq.t; j++)
+					res[i].rpq.push_back(rec->rpq.v[get_rx_pkt_q_idx(j)]);
+				rec->rpq.h = j;
+				#endif
 
 				// if the socket's recorder has finished, do the finish job
 				// NOTE: we must use the test result before the copying. Otherwise if we test here, there may be new data after copy, which will be lost
