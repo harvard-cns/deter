@@ -2,6 +2,7 @@ import glob
 import subprocess
 import re
 if __name__ == "__main__":
+	records = glob.glob("/usr/hadoop/log/*")
 	records = glob.glob("log/*")
 	total_bytes = 0
 	total_mstamp = 0
@@ -11,7 +12,8 @@ if __name__ == "__main__":
 	total_evts_huffman_encoding = 0;
 	total_sockcall = 0
 	total_jiffies = 0
-	total_tcpdump = 0
+	total_pkt_rx = 0
+	total_pkt_tx = 0
 	total_tx_stamp = 0
 	total_tx_stamp_sample_dynamic = 0;
 	total_tx_stamp_sample_huffman_prefix = 0;
@@ -19,7 +21,7 @@ if __name__ == "__main__":
 	total_transfer = 0;
 	for rec in records:
 		print rec
-		m = re.search("/(.*):.*->(.*):", rec)
+		m = re.search("/([^/]*):.*->(.*):", rec)
 		srcip = m.group(1)
 		dstip = m.group(2)
 		if srcip == dstip:
@@ -77,8 +79,13 @@ if __name__ == "__main__":
 
 		cmd = "cat tmp_result.txt | grep 'packets received' | cut -d' ' -f3"
 		out = subprocess.check_output(cmd, shell=True).strip()
-		total_tcpdump += int(out)
-		print "packets:", out, total_tcpdump
+		total_pkt_rx += int(out)
+		print "packets(rx):", out, total_pkt_rx
+
+		cmd = "cat tmp_result.txt | grep 'tsq' | cut -d' ' -f1"
+		out = subprocess.check_output(cmd, shell=True).strip()
+		total_pkt_tx += int(out)
+		print "packets(tx):", out, total_pkt_tx
 
 		cmd = "cat tmp_result.txt | grep 'tx_stamp size, huffman_prefix' | cut -d' ' -f4"
 		out = subprocess.check_output(cmd, shell=True).strip()
@@ -102,9 +109,12 @@ if __name__ == "__main__":
 
 		cmd = "cat tmp_result.txt | grep 'fin_seq' | cut -d' ' -f2"
 		out = subprocess.check_output(cmd, shell=True).strip()
+		if (int(out) == 0):
+			cmd = "cat tmp_result.txt | grep 'total bytes sent' | cut -d' ' -f4"
+			out = subprocess.check_output(cmd, shell=True).strip()
 		total_transfer += int(out)
 		print "transfer (Bytes):", out
-	print total_bytes, total_mstamp, total_tcpdump, total_evts, total_sockcall, total_jiffies
+	print total_bytes, total_mstamp, total_pkt_rx, total_pkt_tx, total_evts, total_sockcall, total_jiffies
 	print 'ts_stamp, no sample:', total_tx_stamp, 'sample_dynamic:', total_tx_stamp_sample_dynamic, 'sample_huffman_prefix:', total_tx_stamp_sample_huffman_prefix
 	print 'evts, dynamic:', total_evts_dynamic, 'huffman_prefix:', total_evts_huffman_prefix, 'huffman_encoding:', total_evts_huffman_encoding
 	print 'total_loss:', total_loss
