@@ -1,3 +1,4 @@
+#include "utils.h"
 #include <linux/kthread.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
@@ -353,9 +354,10 @@ static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *
  *************************************/
 static inline void wait_before_lock(struct sock *sk, u32 type){
 	struct derand_replayer *r = (struct derand_replayer*)sk->replayer;
-	volatile struct event_q *evtq;
-	volatile u32 *seq;
+	struct event_q *evtq;
+	u32 *seq;
 	u32 sc_id, loc;
+	u32 evtq_h;
 	#if DERAND_DEBUG
 	u32 cnt = 0;
 	#endif
@@ -371,19 +373,24 @@ static inline void wait_before_lock(struct sock *sk, u32 type){
 	}else 
 		derand_log("Before lock: event type %u; irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", type, irqs_disabled(), in_interrupt(), local_softirq_pending());
 
-	if (evtq->h >= evtq->t){
+	if (atomic_read_u32(&evtq->h) >= evtq->t){
 		derand_log("Error: more events than recorded\n");
 		return;
 	}
 	// wait until the next event is this event acquiring lock
-	while (replay_ops.state == STARTED && !(*seq == evtq->v[get_event_q_idx(evtq->h)].seq && evtq->v[get_event_q_idx(evtq->h)].type == type)){
+	// Note: Be careful about the potential concurrency bugs in the for condition.
+	//       There are 2 comparisons: seq == evtq->v[evtq->h].seq, and evtq->v[evtq->h].type == type.
+	//       We must first read out the evtq->h (into evtq_h), then use this value for both comparision.
+	//       Otherwise, it is possible that in the first comparison, we read the old evtq->h, then in the 
+	//       second comparison, we read the new evtq->h.
+	for (evtq_h = atomic_read_u32(&evtq->h); replay_ops.state == STARTED && !(atomic_read_u32(seq) == evtq->v[get_event_q_idx(evtq_h)].seq && evtq->v[get_event_q_idx(evtq_h)].type == type); evtq_h = atomic_read_u32(&evtq->h)){
 		// if this is in __release_sock, bh is disabled. We cannot busy wait here because it prevents softirq accepting new packets (NET_RX), which we are waiting for, causing deadlock!
 		if (type >= DERAND_SOCK_ID_BASE && in_softirq())
 			cond_resched_softirq();
 		#if DERAND_DEBUG
 		{
-			u32 evtq_type = evtq->v[get_event_q_idx(evtq->h)].type;
-			if (*seq == evtq->v[get_event_q_idx(evtq->h)].seq && evtq_type >= DERAND_SOCK_ID_BASE && type >= DERAND_SOCK_ID_BASE && evtq_type == type){
+			u32 evtq_type = evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].type;
+			if (atomic_read_u32(seq) == evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq && evtq_type >= DERAND_SOCK_ID_BASE && type >= DERAND_SOCK_ID_BASE && evtq_type == type){
 				static int first = 0;
 				if (first < 128){
 					u32 evtq_sc_id = (evtq_type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
@@ -398,7 +405,7 @@ static inline void wait_before_lock(struct sock *sk, u32 type){
 		#if DERAND_DEBUG
 		if (!(cnt & 0xfffffff)){
 			volatile u32 *q_h = &pkt_q.h, *q_t = &pkt_q.t;
-			derand_log("long wait [%u %u]: pkt_q: %u %u; irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", *seq, evtq->v[get_event_q_idx(evtq->h)].seq, *q_h, *q_t, irqs_disabled(), in_interrupt(), local_softirq_pending());
+			derand_log("long wait [%u %u]: pkt_q: %u %u; irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", atomic_read_u32(seq), evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq, *q_h, *q_t, irqs_disabled(), in_interrupt(), local_softirq_pending());
 		}
 		cnt++;
 		#endif
@@ -407,9 +414,9 @@ static inline void wait_before_lock(struct sock *sk, u32 type){
 	if (type >= DERAND_SOCK_ID_BASE){
 		u32 sc_id = (type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
 		u32 loc = (type - DERAND_SOCK_ID_BASE) >> 28;
-		derand_log("finish wait lock: sockcall %u (%u %u)\n", sc_id, loc >> 1, loc & 1);
+		derand_log("finish wait lock: seq (%u %u) sockcall %u (%u %u)\n", atomic_read_u32(seq), evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq, sc_id, loc >> 1, loc & 1);
 	}else 
-		derand_log("finish wait lock: event type %u\n", type);
+		derand_log("finish wait lock: seq (%u %u) event type %u\n", atomic_read_u32(seq), evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq, type);
 }
 
 static void sockcall_before_lock(struct sock *sk, u32 sc_id){
@@ -418,8 +425,8 @@ static void sockcall_before_lock(struct sock *sk, u32 sc_id){
 
 static void incoming_pkt_before_lock(struct sock *sk){
 	struct derand_replayer *r = (struct derand_replayer*)sk->replayer;
-	volatile struct event_q *evtq;
-	volatile u32 *seq;
+	struct event_q *evtq;
+	u32 *seq;
 	u32 seq_v, evtq_h_seq_v;
 	u32 cnt;
 	if (!r)
@@ -433,10 +440,10 @@ static void incoming_pkt_before_lock(struct sock *sk){
 		// NOTE: evtq->v[get_event_q_idx(evtq->h)].seq must be before *seq
 		//       because if first read seq, then h, we might have read the old seq, then the new h, which points to a new place in v, thus giving v[h].seq > seq
 		//       but if first h then seq, the value of seq must be newer than h, so there won't be such bug
-		evtq_h_seq_v = evtq->v[get_event_q_idx(evtq->h)].seq;
+		evtq_h_seq_v = evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq;
 		rmb();
-		seq_v = *seq;
-		if (evtq->h >= evtq->t || evtq_h_seq_v > seq_v)
+		seq_v = atomic_read_u32(seq);
+		if (atomic_read_u32(&evtq->h) >= evtq->t || evtq_h_seq_v > seq_v)
 			break;
 		cnt++;
 		if (!cnt){
@@ -575,8 +582,8 @@ static inline void new_event(struct sock *sk, u32 type){
 	#if DERAND_DEBUG
 	// check dbg_data
 	if (type >= DERAND_SOCK_ID_BASE){
-		if (r->evtq.h < r->evtq.t){
-			u32 ori = r->evtq.v[get_event_q_idx(r->evtq.h)].dbg_data, rep = tcp_sk(sk)->write_seq;
+		if (atomic_read_u32(&r->evtq.h) < r->evtq.t){
+			u32 ori = r->evtq.v[get_event_q_idx(atomic_read_u32(&r->evtq.h))].dbg_data, rep = tcp_sk(sk)->write_seq;
 			if (ori != rep)
 				derand_log("Mismatch: write_seq %u != %u\n", ori, rep);
 		}
@@ -590,9 +597,9 @@ static inline void new_event(struct sock *sk, u32 type){
 	// because if h++ first, then for a very short time period (after h++ and before seq++),
 	// seq < evtq.v[evtq.h].seq. This would allow a packet MISTAKENLY entering lock.
 	// On the other hand, seq++ first would not have such problem, because the short time perior is seq > evtq.v[evtq.h].seq, which does not allow any thing to happen
-	r->seq++;
+	atomic_inc_u32(&r->seq);
 	wmb();
-	r->evtq.h++;
+	atomic_inc_u32(&r->evtq.h);
 }
 
 static void sockcall_lock(struct sock *sk, u32 sc_id){
@@ -604,7 +611,7 @@ static void incoming_pkt(struct sock *sk){
 	if (!r)
 		return;
 	derand_log("After lock: incoming pkt\n");
-	r->seq++;
+	atomic_inc_u32(&r->seq);
 }
 
 static void write_timer(struct sock *sk){
