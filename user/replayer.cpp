@@ -122,21 +122,6 @@ int Replayer::convert_effect_bool(){
 	return 0;
 }
 
-#if DERAND_DEBUG
-int Replayer::convert_general_event(){
-	auto &s = rec.geq;
-	if (s.size() > GENERAL_EVENT_Q_LEN){
-		fprintf(stderr, "too many general events: %lu > %u\n", s.size(), GENERAL_EVENT_Q_LEN);
-		return -1;
-	}
-	d->geq.h = 0;
-	d->geq.t = s.size();
-	if (s.size() > 0)
-		memcpy(d->geq.v, &s[0], sizeof(GeneralEvent) * s.size());
-	return 0;
-}
-#endif /* DERAND_DEBUG */
-
 #if ADVANCED_EVENT_ENABLE
 int Replayer::convert_advanced_event(){
 	auto &s = rec.aeq;
@@ -187,10 +172,6 @@ int Replayer::read_records(const string &record_file_name){
 		return -8;
 	if (convert_effect_bool())
 		return -9;
-	#if DERAND_DEBUG
-	if (convert_general_event())
-		return -11;
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	if (convert_advanced_event())
 		return -10;

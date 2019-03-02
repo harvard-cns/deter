@@ -21,6 +21,9 @@ replayer.o: replayer.cpp replayer.hpp
 logger: logger.cpp mem_share.o
 	g++ logger.cpp mem_share.o -o logger -O3 -std=gnu++11 -pthread
 
+flow_extractor: flow_extractor.cpp records.o
+	g++ flow_extractor.cpp records.o -o flow_extractor -O3 -std=gnu++11 -lpthread
+
 clean_records:
 	sudo rm *:*'->'*:*
 

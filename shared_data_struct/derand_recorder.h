@@ -27,6 +27,26 @@ static inline u32 get_rx_pkt_q_idx(u32 i){
 }
 #endif
 
+#if GET_REORDER
+/************************************
+ * reorder
+ ***********************************/
+#define DERAND_MAX_REORDER 1024 
+#define DERAND_REORDER_BUF_SIZE (DERAND_MAX_REORDER * sizeof(u16) * 2)
+struct Reorder{
+	u32 left, max_id, min_id;
+	u8 map[DERAND_MAX_REORDER];
+	u8 ascending;
+	u32 buf_idx;
+	struct ReorderPeriod *period;
+	u32 h, t;
+	u8 buf[DERAND_REORDER_BUF_SIZE + DERAND_MAX_REORDER * sizeof(u16) * 2]; // base buffer, plus headroom
+};
+static inline u32 get_reorder_buf_idx(u32 i){
+	return i & (DERAND_REORDER_BUF_SIZE - 1);
+}
+#endif
+
 /************************************
  * jiffies
  ***********************************/
@@ -94,18 +114,6 @@ struct SkbInQueueQ{
 #define get_siq_q_idx(i) ((i) & (DERAND_SKB_IN_QUEUE_PER_SOCK - 1))
 
 /****************************************
- * GeneralEvent
- ***************************************/
-#if DERAND_DEBUG
-#define DERAND_GENERAL_EVENT_PER_SOCK 8192
-struct GeneralEventQ{
-	u32 h, t;
-	struct GeneralEvent v[DERAND_GENERAL_EVENT_PER_SOCK];
-};
-#define get_geq_idx(i) ((i) & (DERAND_GENERAL_EVENT_PER_SOCK - 1))
-#endif /* DERAND_DEBUG */
-
-/****************************************
  * AdvancedEvent
  ***************************************/
 #if ADVANCED_EVENT_ENABLE
@@ -159,6 +167,9 @@ struct derand_recorder{
 	struct derand_rec_sockcall sockcalls[DERAND_SOCKCALL_PER_SOCK]; // sockcall
 	struct PktIdx pkt_idx; // maintain pkt idx
 	struct DropQ dpq; // drop
+	#if GET_REORDER
+	struct Reorder reorder; // reorder
+	#endif
 	#if GET_RX_PKT_IDX
 	struct RxPktQ rpq; // rx packet
 	#endif
@@ -169,9 +180,6 @@ struct derand_recorder{
 	struct mstamp_q msq; // skb_mstamp
 	struct effect_bool_q ebq[DERAND_EFFECT_BOOL_N_LOC]; // effect_bool
 	struct SkbInQueueQ siqq; // skb_still_in_host_queue
-	#if DERAND_DEBUG
-	struct GeneralEventQ geq;
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	struct AdvancedEventQ aeq;
 	#endif
@@ -180,6 +188,11 @@ struct derand_recorder{
 	#endif
 	#if COLLECT_RX_STAMP
 	struct RxStampQ rsq;
+	#endif
+	#if GET_BOTTLENECK
+	u64 net, recv, other;
+	u64 app_net, app_recv, app_other;
+	u64 last_bottleneck_update_time;
 	#endif
 };
 

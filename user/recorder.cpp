@@ -80,28 +80,35 @@ void* recorder_fn(void* args){
 				for (j = rec->dpq.h; j < rec->dpq.t; j++)
 					res[i].dpq.push_back(rec->dpq.v[get_drop_q_idx(j)]);
 				rec->dpq.h = j;
+				#if GET_REORDER
+				// copy reorder
+				res[i].broken |= (rec->reorder.h + DERAND_REORDER_BUF_SIZE < rec->reorder.t) << 3;
+				for (j = rec->reorder.h; j < rec->reorder.t; j++)
+					res[i].reorder.push_back(rec->reorder.buf[get_reorder_buf_idx(j)]);
+				rec->reorder.h = j;
+				#endif
 				// copy jiffies
-				res[i].broken |= (rec->jf.h + DERAND_JIFFIES_PER_SOCK < rec->jf.t) << 3;
+				res[i].broken |= (rec->jf.h + DERAND_JIFFIES_PER_SOCK < rec->jf.t) << 4;
 				for (j = rec->jf.h; j < rec->jf.t; j++)
 					res[i].jiffies.push_back(rec->jf.v[get_jiffies_q_idx(j)]);
 				rec->jf.h = j;
 				// copy memory pressure
-				res[i].broken |= (rec->mpq.h + DERAND_MEMORY_PRESSURE_PER_SOCK < rec->mpq.t) << 4;
+				res[i].broken |= (rec->mpq.h + DERAND_MEMORY_PRESSURE_PER_SOCK < rec->mpq.t) << 5;
 				for (j = rec->mpq.h; j < (rec->mpq.t & (~31)); j += 32)
 					res[i].mpq.push_back(rec->mpq.v[get_memory_pressure_q_idx(j) / 32]);
 				rec->mpq.h = j;
 				// copy memory_allocated
-				res[i].broken |= (rec->maq.h + DERAND_MEMORY_ALLOCATED_PER_SOCK < rec->maq.t) << 5;
+				res[i].broken |= (rec->maq.h + DERAND_MEMORY_ALLOCATED_PER_SOCK < rec->maq.t) << 6;
 				for (j = rec->maq.h; j < rec->maq.t; j++)
 					res[i].memory_allocated.push_back(rec->maq.v[get_memory_allocated_q_idx(j)]);
 				rec->maq.h = j;
 				// copy mstamp
-				res[i].broken |= (rec->msq.h + DERAND_MSTAMP_PER_SOCK < rec->msq.t) << 6;
+				res[i].broken |= (rec->msq.h + DERAND_MSTAMP_PER_SOCK < rec->msq.t) << 7;
 				for (j = rec->msq.h; j < rec->msq.t; j++)
 					res[i].mstamp.push_back(rec->msq.v[get_mstamp_q_idx(j)]);
 				rec->msq.h = j;
 				// copy skb_still_in_host_queue
-				res[i].broken |= (rec->siqq.h + DERAND_SKB_IN_QUEUE_PER_SOCK < rec->siqq.t) << 7;
+				res[i].broken |= (rec->siqq.h + DERAND_SKB_IN_QUEUE_PER_SOCK < rec->siqq.t) << 8;
 				for (j = rec->siqq.h; j < rec->siqq.t; j++)
 					res[i].siqq.push_back(rec->siqq.v[get_siq_q_idx(j)]);
 				rec->siqq.h = j;
@@ -109,41 +116,34 @@ void* recorder_fn(void* args){
 				// for each effect bool location
 				for (int k = 0; k < DERAND_EFFECT_BOOL_N_LOC; k++){
 					effect_bool_q &ebq = rec->ebq[k];
-					res[i].broken |= (ebq.h + DERAND_EFFECT_BOOL_PER_SOCK < ebq.t) << (8 + k);
+					res[i].broken |= (ebq.h + DERAND_EFFECT_BOOL_PER_SOCK < ebq.t) << (9 + k);
 					for (j = ebq.h; j < (ebq.t & (~31)); j += 32)
 						res[i].ebq[k].push_back(ebq.v[get_effect_bool_q_idx(j) / 32]);
 					ebq.h = j;
 				}
-				#if DERAND_DEBUG
-				// copy GeneralEvent
-				res[i].broken |= (rec->geq.h + DERAND_GENERAL_EVENT_PER_SOCK < rec->geq.t) << (9 + DERAND_EFFECT_BOOL_N_LOC);
-				for (j = rec->geq.h; j < rec->geq.t; j++)
-					res[i].geq.push_back(rec->geq.v[get_geq_idx(j)]);
-				rec->geq.h = j;
-				#endif
 				#if ADVANCED_EVENT_ENABLE
-				res[i].broken |= (rec->aeq.h + DERAND_ADVANCED_EVENT_PER_SOCK < rec->aeq.t) << (8 + DERAND_EFFECT_BOOL_N_LOC);
+				res[i].broken |= (rec->aeq.h + DERAND_ADVANCED_EVENT_PER_SOCK < rec->aeq.t) << (9 + DERAND_EFFECT_BOOL_N_LOC);
 				for (j = rec->aeq.h; j < rec->aeq.t; j++){
 					res[i].aeq.push_back(rec->aeq.v[get_aeq_idx(j)]);
 				}
 				rec->aeq.h = j;
 				#endif
 				#if COLLECT_TX_STAMP
-				res[i].broken |= (rec->tsq.h + DERAND_TX_STAMP_PER_SOCK < rec->tsq.t) << (10 + DERAND_EFFECT_BOOL_N_LOC);
+				res[i].broken |= (rec->tsq.h + DERAND_TX_STAMP_PER_SOCK < rec->tsq.t) << (11 + DERAND_EFFECT_BOOL_N_LOC);
 				for (j = rec->tsq.h; j < rec->tsq.t; j++){
 					res[i].tsq.push_back(rec->tsq.v[get_tsq_idx(j)]);
 				}
 				rec->tsq.h = j;
 				#endif
 				#if COLLECT_RX_STAMP
-				res[i].broken |= (rec->rsq.h + DERAND_RX_STAMP_PER_SOCK < rec->rsq.t) << (11 + DERAND_EFFECT_BOOL_N_LOC);
+				res[i].broken |= (rec->rsq.h + DERAND_RX_STAMP_PER_SOCK < rec->rsq.t) << (12 + DERAND_EFFECT_BOOL_N_LOC);
 				for (j = rec->rsq.h; j < rec->rsq.t; j++){
 					res[i].rsq.push_back(rec->rsq.v[get_rsq_idx(j)]);
 				}
 				rec->rsq.h = j;
 				#endif
 				#if GET_RX_PKT_IDX
-				res[i].broken |= (rec->rpq.h + DERAND_RX_PKT_PER_SOCK < rec->rpq.t) << (12 + DERAND_EFFECT_BOOL_N_LOC);
+				res[i].broken |= (rec->rpq.h + DERAND_RX_PKT_PER_SOCK < rec->rpq.t) << (13 + DERAND_EFFECT_BOOL_N_LOC);
 				for (j = rec->rpq.h; j < rec->rpq.t; j++)
 					res[i].rpq.push_back(rec->rpq.v[get_rx_pkt_q_idx(j)]);
 				rec->rpq.h = j;
@@ -318,13 +318,6 @@ int main(int argc, char** argv)
 						res[i].ebq[k].push_back(ebq.v[get_effect_bool_q_idx(j) / 32]);
 					ebq.h = j;
 				}
-				#if DERAND_DEBUG
-				// copy GeneralEvent
-				res[i].broken |= (rec->geq.h + DERAND_GENERAL_EVENT_PER_SOCK < rec->geq.t) << (9 + DERAND_EFFECT_BOOL_N_LOC);
-				for (j = rec->geq.h; j < rec->geq.t; j++)
-					res[i].geq.push_back(rec->geq.v[get_geq_idx(j)]);
-				rec->geq.h = j;
-				#endif
 				#if ADVANCED_EVENT_ENABLE
 				res[i].broken |= (rec->aeq.h + DERAND_ADVANCED_EVENT_PER_SOCK < rec->aeq.t) << (8 + DERAND_EFFECT_BOOL_N_LOC);
 				for (j = rec->aeq.h; j < rec->aeq.t; j++){

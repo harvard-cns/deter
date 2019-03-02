@@ -65,15 +65,6 @@ struct SkbInQueueQ{
 };
 #define get_siq_q_idx(i) ((i) & (SKB_IN_QUEUE_Q_LEN - 1))
 
-#if DERAND_DEBUG
-#define GENERAL_EVENT_Q_LEN 65536
-struct GeneralEventQ{
-	u32 h, t;
-	struct GeneralEvent v[GENERAL_EVENT_Q_LEN];
-};
-#define get_geq_idx(i) ((i) & (GENERAL_EVENT_Q_LEN - 1))
-#endif /* DERAND_DEBUG */
-
 #if ADVANCED_EVENT_ENABLE
 #define ADVANCED_EVENT_Q_LEN 262144
 struct AdvancedEventQ{
@@ -100,9 +91,6 @@ struct derand_replayer{
 	struct mstamp_q msq;
 	struct effect_bool_q ebq[DERAND_EFFECT_BOOL_N_LOC]; // effect_bool
 	struct SkbInQueueQ siqq; // skb_still_in_host_queue
-	#if DERAND_DEBUG
-	struct GeneralEventQ geq;
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	struct AdvancedEventQ aeq;
 	#endif

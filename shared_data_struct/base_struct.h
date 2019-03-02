@@ -10,6 +10,10 @@
 #define GET_EVENT_STAMP 0
 #define GET_CWND 0
 #define GET_RX_PKT_IDX 0
+#define GET_WRITE_SEQ_PER_SOCKCALL 0
+#define GET_TS_PER_SOCKCALL 0
+#define GET_BOTTLENECK 0
+#define GET_REORDER 0
 
 /* Different types of socket calls' ID starts with different highest 4 bits */
 #define DERAND_SOCK_ID_BASE 100
@@ -59,6 +63,20 @@ struct derand_rec_sockcall{
 		struct derand_rec_sockcall_setsockopt setsockopt;
 	};
 	u64 thread_id;
+	#if GET_TS_PER_SOCKCALL
+	u64 ts;
+	#endif
+	#if GET_WRITE_SEQ_PER_SOCKCALL
+	u32 write_seq;
+	u32 snd_una, snd_nxt;
+	#endif
+	#if GET_BOTTLENECK
+	// two categories: not app limited, app limited
+	// within each, three sub-categories: network anormly, receiver limit, other
+	// Note, these are in microseconds, so use u32
+	u32 net, recv, other;
+	u32 app_net, app_recv, app_other;
+	#endif
 };
 static inline const char* get_sockcall_str(struct derand_rec_sockcall *sc, char* buf){
 	switch (sc->type){
@@ -159,6 +177,18 @@ static inline u32 update_pkt_idx(struct PktIdx *pkt_idx, u16 ipid){
 	pkt_idx->last_ipid = ipid;
 	return pkt_idx->idx;
 }
+
+#if GET_REORDER
+/* struct for reorder */
+struct ReorderPeriod{
+	u32 start, len;
+	u32 min, max;
+	u16 order[0];
+};
+static inline u32 size_of_ReorderPeriod(struct ReorderPeriod *r){
+	return sizeof(struct ReorderPeriod) + r->len * sizeof(r->order[0]);
+}
+#endif
 
 /* struct for a jiffies read with new value */
 union jiffies_rec{

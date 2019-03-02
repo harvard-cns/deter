@@ -302,6 +302,9 @@ public:
 	std::vector<derand_event> evts;
 	std::vector<derand_rec_sockcall> sockcalls;
 	std::vector<uint32_t> dpq;
+	#if GET_REORDER
+	std::vector<uint8_t> reorder;
+	#endif
 	std::vector<jiffies_rec> jiffies;
 	BitArray mpq;
 	std::vector<memory_allocated_rec> memory_allocated;
@@ -314,9 +317,6 @@ public:
 	#endif
 	#if COLLECT_RX_STAMP
 	std::vector<uint32_t> rsq;
-	#endif
-	#if DERAND_DEBUG
-	std::vector<GeneralEvent> geq;
 	#endif
 	#if ADVANCED_EVENT_ENABLE
 	std::vector<u32> aeq;

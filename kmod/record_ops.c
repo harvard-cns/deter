@@ -1,4 +1,5 @@
 #include <net/tcp.h>
+#include <linux/string.h>
 #include <net/derand.h>
 #include <net/derand_ops.h>
 #include "record_ctrl.h"
@@ -39,16 +40,6 @@ static inline void record_advanced_event(const struct sock *sk, u8 func_num, u8 
 	aeq->t += i;
 }
 #endif
-
-#if DERAND_DEBUG
-static inline void add_geq(struct GeneralEventQ *geq, u32 type, u64 data){
-	struct GeneralEvent *ge = &geq->v[get_geq_idx(geq->t)];
-	ge->type = type;
-	*(u64*)(ge->data) = data;
-	wmb();
-	geq->t++;
-}
-#endif /* DERAND_DEBUG */
 
 // allocate memory for a socket
 static void* derand_alloc_mem(void){
@@ -114,6 +105,10 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	rec->evt_h = rec->evt_t = 0;
 	rec->sc_h = rec->sc_t = 0;
 	rec->dpq.h = rec->dpq.t = 0;
+	// reorder
+	#if GET_REORDER
+	memset(&rec->reorder, 0, sizeof(rec->reorder));
+	#endif
 	#if GET_RX_PKT_IDX
 	rec->rpq.h = rec->rpq.t = 0;
 	#endif
@@ -125,9 +120,6 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	for (i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		rec->ebq[i].h = rec->ebq[i].t = 0;
 	rec->siqq.h = rec->siqq.t = 0;
-	#if DERAND_DEBUG
-	rec->geq.h = rec->geq.t = 0;
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	rec->aeq.h = rec->aeq.t = 0;
 	#endif
@@ -136,6 +128,11 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	#endif
 	#if COLLECT_RX_STAMP
 	rec->rsq.h = rec->rsq.t = 0;
+	#endif
+	#if GET_BOTTLENECK
+	rec->app_net = rec->app_recv = rec->app_other = 0;
+	rec->net = rec->recv = rec->other = 0;
+	rec->last_bottleneck_update_time = ktime_get().tv64;
 	#endif
 	if (mode == 0)
 		copy_from_server_sock(sk); // copy sock init data
@@ -166,6 +163,32 @@ static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 	}
 }
 
+#if GET_BOTTLENECK
+static inline void record_bottleneck(struct sock *sk, struct derand_recorder *rec){
+	struct tcp_sock *tp = tcp_sk(sk);
+	u64 now = ktime_get().tv64;
+	if (tp->snd_una != tp->write_seq){ // active
+		if (sk->sk_socket && test_bit(SOCK_NOSPACE, &sk->sk_socket->flags)){ // sendbuf limit, meaning app has enough to send
+			if (inet_csk(sk)->icsk_ca_state != TCP_CA_Open){ // network anormly
+				rec->net += now - rec->last_bottleneck_update_time;
+			}else if (tp->snd_nxt - tp->snd_una + tp->mss_cache > tp->snd_wnd){ // receiver limit
+				rec->recv += now - rec->last_bottleneck_update_time;
+			}else
+				rec->other += now - rec->last_bottleneck_update_time;
+		}else{ // app may not have enough to send
+			if (inet_csk(sk)->icsk_ca_state != TCP_CA_Open){ // network anormly
+				rec->app_net += now - rec->last_bottleneck_update_time;
+			}else if (tp->snd_nxt - tp->snd_una + tp->mss_cache > tp->snd_wnd){ // receiver limit
+				rec->app_recv += now - rec->last_bottleneck_update_time;
+			}else
+				rec->app_other += now - rec->last_bottleneck_update_time;
+		}
+	}// else, inactive. ignore the period, because nothing to send
+	// update last timestamp
+	rec->last_bottleneck_update_time = now;
+}
+#endif
+
 /* this function should be called in thread_safe environment */
 static inline void new_event(struct sock *sk, u32 type){
 	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
@@ -180,7 +203,6 @@ static inline void new_event(struct sock *sk, u32 type){
 	// enqueue the new event
 	idx = get_evt_q_idx(rec->evt_t);
 	#if DERAND_DEBUG
-	//add_geq(&rec->geq, 0, type);
 	rec->evts[idx] = (struct derand_event){.seq = seq, .type = type, .dbg_data = tcp_sk(sk)->write_seq};
 	#else
 	rec->evts[idx] = (struct derand_event){.seq = seq, .type = type};
@@ -195,7 +217,15 @@ static inline void new_event(struct sock *sk, u32 type){
 	#endif
 	wmb();
 	rec->evt_t++;
+	#if GET_BOTTLENECK
+	record_bottleneck(sk, rec);
+	#endif
 }
+
+#if GET_REORDER
+/* declaration for function that ends reorder buffer */
+static void end_reorder(struct derand_recorder *rec);
+#endif
 
 /* destruct a derand_recorder.
  */
@@ -205,6 +235,11 @@ static void recorder_destruct(struct sock *sk){
 		//printk("[recorder_destruct] sport = %hu, dport = %hu, recorder is NULL.\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		return;
 	}
+
+	#if GET_REORDER
+	// end reorder buf
+	end_reorder(rec);
+	#endif
 
 	// add a finish event
 	new_event(sk, EVENT_TYPE_FINISH);
@@ -257,6 +292,22 @@ static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	rec_sc->sendmsg.flags = msg->msg_flags;
 	rec_sc->sendmsg.size = size;
 	rec_sc->thread_id = (u64)current;
+	#if GET_TS_PER_SOCKCALL
+	rec_sc->ts = ktime_get().tv64;
+	#endif
+	#if GET_WRITE_SEQ_PER_SOCKCALL
+	rec_sc->write_seq = tcp_sk(sk)->write_seq;
+	rec_sc->snd_una = tcp_sk(sk)->snd_una;
+	rec_sc->snd_nxt = tcp_sk(sk)->snd_nxt;
+	#endif
+	#if GET_BOTTLENECK
+	rec_sc->app_net = rec->app_net / 1000; // rec_sc->app_net is u32 in microsecond, rec->app_net is u64 in nanosecond. same below
+	rec_sc->app_recv = rec->app_recv / 1000;
+	rec_sc->app_other = rec->app_other / 1000;
+	rec_sc->net = rec->net / 1000;
+	rec_sc->recv = rec->recv / 1000;
+	rec_sc->other = rec->other / 1000;
+	#endif
 	// update sc_t
 	update_sc_t(rec, sc_id);
 	// return sockcall ID 
@@ -290,6 +341,14 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 	rec_sc->recvmsg.flags = nonblock | flags;
 	rec_sc->recvmsg.size = len;
 	rec_sc->thread_id = (u64)current;
+	#if GET_TS_PER_SOCKCALL
+	rec_sc->ts = ktime_get().tv64;
+	#endif
+	#if GET_WRITE_SEQ_PER_SOCKCALL
+	rec_sc->write_seq = tcp_sk(sk)->write_seq;
+	rec_sc->snd_una = tcp_sk(sk)->snd_una;
+	rec_sc->snd_nxt = tcp_sk(sk)->snd_nxt;
+	#endif
 	// update sc_t
 	update_sc_t(rec, sc_id);
 	// return sockcall ID
@@ -312,6 +371,14 @@ static u32 new_splice_read(struct sock *sk, size_t len, unsigned int flags){
 	rec_sc->splice_read.flags = flags;
 	rec_sc->splice_read.size = len;
 	rec_sc->thread_id = (u64)current;
+	#if GET_TS_PER_SOCKCALL
+	rec_sc->ts = ktime_get().tv64;
+	#endif
+	#if GET_WRITE_SEQ_PER_SOCKCALL
+	rec_sc->write_seq = tcp_sk(sk)->write_seq;
+	rec_sc->snd_una = tcp_sk(sk)->snd_una;
+	rec_sc->snd_nxt = tcp_sk(sk)->snd_nxt;
+	#endif
 	// update sc_t
 	update_sc_t(rec, sc_id);
 	// return sockcall ID
@@ -333,6 +400,22 @@ static u32 new_close(struct sock *sk, long timeout){
 	rec_sc->type = DERAND_SOCKCALL_TYPE_CLOSE;
 	rec_sc->close.timeout = timeout;
 	rec_sc->thread_id = (u64)current;
+	#if GET_TS_PER_SOCKCALL
+	rec_sc->ts = ktime_get().tv64;
+	#endif
+	#if GET_WRITE_SEQ_PER_SOCKCALL
+	rec_sc->write_seq = tcp_sk(sk)->write_seq;
+	rec_sc->snd_una = tcp_sk(sk)->snd_una;
+	rec_sc->snd_nxt = tcp_sk(sk)->snd_nxt;
+	#endif
+	#if GET_BOTTLENECK
+	rec_sc->app_net = rec->app_net / 1000; // rec_sc->app_net is u32 in microsecond, rec->app_net is u64 in nanosecond. same below
+	rec_sc->app_recv = rec->app_recv / 1000;
+	rec_sc->app_other = rec->app_other / 1000;
+	rec_sc->net = rec->net / 1000;
+	rec_sc->recv = rec->recv / 1000;
+	rec_sc->other = rec->other / 1000;
+	#endif
 	// update sc_t
 	update_sc_t(rec, sc_id);
 	// return sockcall ID
@@ -361,6 +444,14 @@ static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *
 		rec_sc->setsockopt.optlen = optlen;
 		copy_from_user(rec_sc->setsockopt.optval, optval, optlen);
 	}
+	#if GET_TS_PER_SOCKCALL
+	rec_sc->ts = ktime_get().tv64;
+	#endif
+	#if GET_WRITE_SEQ_PER_SOCKCALL
+	rec_sc->write_seq = tcp_sk(sk)->write_seq;
+	rec_sc->snd_una = tcp_sk(sk)->snd_una;
+	rec_sc->snd_nxt = tcp_sk(sk)->snd_nxt;
+	#endif
 	// update sc_t
 	update_sc_t(rec, sc_id);
 	// return sockcall ID
@@ -377,9 +468,13 @@ static void sockcall_lock(struct sock *sk, u32 sc_id){
 
 /* incoming packets do not need to record their seq # */
 static void incoming_pkt(struct sock *sk){
-	if (!sk->recorder)
+	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
+	if (!rec)
 		return;
-	((struct derand_recorder*)sk->recorder)->seq++;
+	#if GET_BOTTLENECK
+	record_bottleneck(sk, rec);
+	#endif
+	rec->seq++;
 }
 
 static void write_timer(struct sock *sk){
@@ -410,6 +505,97 @@ static inline void rx_stamp(struct derand_recorder *rec){
 }
 #endif
 
+#if GET_REORDER
+static inline u32 get_map_idx(u32 idx){
+	return idx & (DERAND_MAX_REORDER - 1);
+}
+static inline void start_new_reorder(struct derand_recorder *rec){
+    // TODO to optimize: struct align 4 bytes
+    struct ReorderPeriod *r = rec->reorder.period = (struct ReorderPeriod*)(rec->reorder.buf + get_reorder_buf_idx(rec->reorder.buf_idx));
+    rec->reorder.ascending = 1;
+    rec->reorder.min_id = r->start = rec->reorder.max_id = rec->reorder.left = (rec->pkt_idx.idx + 1); // this is the missing one
+    r->len = 0;
+}
+
+static inline void dump_reorder(struct derand_recorder *rec){
+    // if all packets in the buffer is ascending, no need to record
+    if (rec->reorder.ascending){
+        rec->reorder.period = NULL;
+        return;
+    }
+    struct ReorderPeriod *r = rec->reorder.period;
+    #if 1
+    // optimization: drop the leading non-reorder
+    u32 skip = 0, min = rec->reorder.min_id - r->start;
+    u32 tail = r->len, max = rec->reorder.max_id - r->start;
+    while (skip < r->len && r->order[skip] == min + skip)
+        skip++;
+    while (tail > skip && r->order[tail-1] == max){
+        tail--;
+        max--;
+    }
+    r->min = min+skip + r->start;
+    r->max = max + r->start;
+    if (skip){
+        r->start += skip;
+        u32 j = 0;
+        for (; j + skip < tail; j++)
+            r->order[j] = r->order[j + skip] - skip;
+        r->len = j;
+    }else if (tail < r->len){
+        r->len = tail;
+    }
+    #endif
+
+	// deal with loop back
+	u32 size = size_of_ReorderPeriod(rec->reorder.period); // the size of current period struct. TODO: align 4-bytes
+	u32 right_end = rec->reorder.buf_idx + size; // the right end mem address of the current period struct
+	if (right_end >= DERAND_REORDER_BUF_SIZE){
+		memcpy(rec->reorder.buf, rec->reorder.buf + DERAND_REORDER_BUF_SIZE, right_end - DERAND_REORDER_BUF_SIZE); // copy the data in the headroom to the beginning of buf
+		right_end -= DERAND_REORDER_BUF_SIZE;
+	}
+    // update buf_idx
+	rec->reorder.buf_idx = right_end;
+	rec->reorder.period = NULL;
+	// update t
+	wmb();
+	rec->reorder.t += size;
+}
+
+static inline void add_to_reorder(struct derand_recorder *rec, uint32_t idx){
+	struct ReorderPeriod *r = rec->reorder.period;
+	if (r->len > 0)
+		rec->reorder.ascending &= (r->start + r->order[r->len-1] < idx);
+	r->order[r->len++] = idx - r->start;
+	rec->reorder.map[get_map_idx(idx)] = 1;
+	if (idx > rec->reorder.max_id)
+		rec->reorder.max_id = idx;
+}
+
+static inline void pop_till(struct derand_recorder *rec, uint32_t till){
+    while (rec->reorder.left <= till){
+        if (!rec->reorder.map[get_map_idx(rec->reorder.left)]){ // if not appear, mark as drop
+            rec->dpq.v[get_drop_q_idx(rec->dpq.t)] = rec->reorder.left;
+			wmb();
+			rec->dpq.t++;
+            if (rec->reorder.min_id == rec->reorder.left)
+                rec->reorder.min_id++;
+        }else {
+            rec->reorder.map[get_map_idx(rec->reorder.left)] = 0;
+        }
+        rec->reorder.left++;
+        rec->pkt_idx.last_ipid++;
+        rec->pkt_idx.idx++;
+    }
+}
+static void end_reorder(struct derand_recorder *rec){
+	if (rec->reorder.period){
+		pop_till(rec, rec->reorder.max_id);
+		dump_reorder(rec);
+	}
+}
+#endif /* GET_REORDER */
+
 void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
 	u16 ipid, gap;
@@ -424,7 +610,7 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	#endif
 
 	// if this packet ackes our fin, skip. ipid from the other side may not be consecutive after acking our fin
-	if (rec->pkt_idx.fin && ntohl(tcph->ack_seq) == rec->pkt_idx.fin_seq + 1)
+	if (rec->pkt_idx.fin && (ntohl(tcph->ack_seq) == rec->pkt_idx.fin_seq + 1 || ntohl(tcph->ack_seq) == rec->pkt_idx.fin_seq + 2))
 		return;
 	
 	ipid = ntohs(iph->id);
@@ -444,6 +630,57 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	rec->rpq.t++;
 	#endif
 
+	#if GET_REORDER
+	idx = rec->pkt_idx.idx + gap; // the index of this packet. pkt_idx.idx is unchanged until we know it is in order, so it represents the next in-order index
+	// check reorder
+	if (gap > 1 || rec->reorder.period != NULL){
+		// if not in reorder mode
+		if (rec->reorder.period == NULL){
+			start_new_reorder(rec);
+		}
+		// if idx is far away from the left, pop left
+		if (rec->reorder.left + DERAND_MAX_REORDER <= idx)
+			pop_till(rec, idx - DERAND_MAX_REORDER);
+		// pop the leading '1's in the map
+		while (rec->reorder.map[get_map_idx(rec->reorder.left)]){
+			rec->reorder.map[get_map_idx(rec->reorder.left)] = 0;
+			rec->reorder.left++;
+			rec->pkt_idx.last_ipid++;
+			rec->pkt_idx.idx++;
+		}
+		if (rec->reorder.left > rec->reorder.max_id){
+			// dump pkt_idx.reorder_period
+			dump_reorder(rec);
+			// if idx is still not left, start new reordering period
+			if (idx != rec->reorder.left){
+				start_new_reorder(rec);
+			}else{ // this is a normal packet, continue
+				rec->pkt_idx.last_ipid++;
+				rec->pkt_idx.idx++;
+				return;
+			}
+		}
+		// add to pkt_idx.reorder_period, and mark map
+		add_to_reorder(rec, idx);
+		// if left hole filled
+		if (rec->reorder.left == idx){
+			// pop left
+			while (rec->reorder.map[get_map_idx(rec->reorder.left)]){
+				rec->reorder.map[get_map_idx(rec->reorder.left)] = 0;
+				rec->reorder.left++;
+				rec->pkt_idx.last_ipid++;
+				rec->pkt_idx.idx++;
+			}
+			if (rec->reorder.left > rec->reorder.max_id){
+				// dump pkt_idx.reorder_period
+				dump_reorder(rec);
+			}
+		}
+	}else if (gap == 1){ // normal
+		rec->pkt_idx.last_ipid++;
+		rec->pkt_idx.idx++;
+	}
+	#else
 	// record drops
 	for (i = 1; i < gap; i++){
 		rec->dpq.v[get_drop_q_idx(rec->dpq.t)] = idx + i;
@@ -451,6 +688,7 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 		rec->dpq.t++;
 	}
 	update_pkt_idx(&rec->pkt_idx, ipid);
+	#endif
 }
 
 void record_fin_seq(struct sock *sk){
@@ -469,9 +707,6 @@ static void _read_jiffies(const struct sock *sk, unsigned long v, int id){
 	if (!is_valid_recorder(rec))
 		return;
 	jf = &rec->jf;
-	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)sk->recorder)->geq, 1, id);
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	record_advanced_event(sk, -1, id, 0b0, 1, jf->t); // jiffies: type=-1, loc=id, fmt=0, data=jf->t
 	#endif
@@ -510,9 +745,6 @@ static inline void push_memory_pressure_q(struct memory_pressure_q *q, bool v){
 	q->t++;
 }
 static void record_tcp_under_memory_pressure(const struct sock *sk, bool ret){
-	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 2, ret);
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	record_advanced_event(sk, -2, 0, 0b0, 1, (int)ret); // mpq: type=-2, loc=0, fmt=0, data=ret
 	#endif
@@ -520,9 +752,6 @@ static void record_tcp_under_memory_pressure(const struct sock *sk, bool ret){
 }
 
 static void record_sk_under_memory_pressure(const struct sock *sk, bool ret){
-	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 2, ret);
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	record_advanced_event(sk, -2, 0, 0b0, 1, (int)ret); // mpq: type=-2, loc=0, fmt=0, data=ret
 	#endif
@@ -531,9 +760,6 @@ static void record_sk_under_memory_pressure(const struct sock *sk, bool ret){
 
 static void record_sk_memory_allocated(const struct sock *sk, long ret){
 	struct memory_allocated_q *maq = &((struct derand_recorder*)sk->recorder)->maq;
-	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 3, ret);
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	record_advanced_event(sk, -3, 0, 0b0, 1, maq->t); // maq: type=-3, loc=0, fmt=0b0, data=maq->t
 	#endif
@@ -557,9 +783,6 @@ static void record_sk_memory_allocated(const struct sock *sk, long ret){
 
 static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){
 	struct derand_recorder *rec = sk->recorder;
-	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 4, ret);
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	record_advanced_event(sk, -4, 0, 0b0, 1, 0); // type=-4, loc=0, fmt=0b00, data=0
 	#endif
@@ -568,9 +791,6 @@ static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){
 
 static void record_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int loc){
 	struct mstamp_q *msq = &((struct derand_recorder*)sk->recorder)->msq;
-	#if DERAND_DEBUG
-	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 5, loc);
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	record_advanced_event(sk, -5, 0, 0b0, 1, msq->t); // msq: type=-5, loc=0, fmt=0b0, data=msq->t
 	#endif
@@ -590,10 +810,6 @@ static inline void push_effect_bool_q(struct effect_bool_q *q, bool v){
 	q->t++;
 }
 static void record_effect_bool(const struct sock *sk, int loc, bool v){
-	#if DERAND_DEBUG
-	if (loc != 0) // loc 0 is not serializable among all events, but just within incoming packets
-		add_geq(&((struct derand_recorder*)(sk->recorder))->geq, 6 + loc, v);
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	if (loc != 0) // loc 0 is not serializable among all events, but just within incoming packets
 		record_advanced_event(sk, -6, loc, 0b0, 1, ((struct derand_recorder*)sk->recorder)->ebq[loc].t); // ebq: type=-6, loc=loc, fmt=0b0, data=ebq[loc].t
@@ -610,12 +826,6 @@ static void record_skb_still_in_host_queue(const struct sock *sk, bool ret){
 	wmb();
 	siqq->t++;
 }
-
-#if DERAND_DEBUG
-static void record_general_event(const struct sock *sk, int loc, u64 data){
-	add_geq(&((struct derand_recorder*)(sk->recorder))->geq, loc + 1000, data);
-}
-#endif
 
 #if COLLECT_TX_STAMP
 static void tx_stamp(const struct sk_buff *skb){
@@ -665,9 +875,6 @@ int bind_record_ops(void){
 	derand_record_ops.sk_sockets_allocated_read_positive = record_sk_sockets_allocated_read_positive;
 	derand_record_ops.skb_mstamp_get = record_skb_mstamp_get;
 	derand_record_ops.record_skb_still_in_host_queue = record_skb_still_in_host_queue;
-	#if DERAND_DEBUG
-	derand_record_ops.general_event = record_general_event;
-	#endif
 	#if COLLECT_TX_STAMP
 	derand_record_ops.tx_stamp = tx_stamp;
 	#endif

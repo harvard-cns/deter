@@ -121,6 +121,12 @@ int Records::dump(const char* filename){
 	if (!dump_vector(dpq, fout))
 		goto fail_write;
 
+	#if GET_REORDER
+	// write reorder
+	if (!dump_vector(reorder, fout))
+		goto fail_write;
+	#endif
+
 	// write jiffies_reads
 	if (!dump_vector(jiffies, fout))
 		goto fail_write;
@@ -161,12 +167,6 @@ int Records::dump(const char* filename){
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		if (!ebq[i].dump(fout))
 			goto fail_write;
-
-	#if DERAND_DEBUG
-	// write geq
-	if (!dump_vector(geq, fout))
-		goto fail_write;
-	#endif
 
 	#if ADVANCED_EVENT_ENABLE
 	// write aeq
@@ -226,6 +226,12 @@ int Records::read(const char* filename){
 	if (!read_vector(dpq, fin))
 		goto fail_read;
 
+	#if GET_REORDER
+	// read reorder
+	if (!read_vector(reorder, fin))
+		goto fail_read;
+	#endif
+
 	// read jiffies_reads
 	if (!read_vector(jiffies, fin))
 		goto fail_read;
@@ -267,12 +273,6 @@ int Records::read(const char* filename){
 		if (!ebq[i].read(fin))
 			goto fail_read;
 
-	#if DERAND_DEBUG
-	// read geq
-	if (!read_vector(geq, fin))
-		goto fail_read;
-	#endif
-
 	#if ADVANCED_EVENT_ENABLE
 	// read aeq
 	if (!read_vector(aeq, fin))
@@ -299,6 +299,8 @@ uint64_t Records::get_pkt_received(){
 		pkt_rcvd += i>0 ? (evts[i].seq - evts[i-1].seq - 1) : evts[i].seq;
 	return pkt_rcvd;
 	#endif
+	if (evts.size() == 0)
+		return 0;
 	return evts.back().seq + 1 - evts.size();
 }
 
@@ -437,23 +439,32 @@ void Records::print(FILE* fout){
 		derand_rec_sockcall &sc = sockcalls[i];
 		fprintf(fout, "%d ", i);
 		if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG){
-			fprintf(fout, "sendmsg: 0x%x %lu thread %lu\n", sc.sendmsg.flags, sc.sendmsg.size, sc.thread_id);
+			fprintf(fout, "sendmsg: 0x%x %lu thread %lu", sc.sendmsg.flags, sc.sendmsg.size, sc.thread_id);
 		}else if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG){
-			fprintf(fout, "recvmsg: 0x%x %lu thread %lu\n", sc.recvmsg.flags, sc.recvmsg.size, sc.thread_id);
+			fprintf(fout, "recvmsg: 0x%x %lu thread %lu", sc.recvmsg.flags, sc.recvmsg.size, sc.thread_id);
 		}else if (sc.type == DERAND_SOCKCALL_TYPE_CLOSE){
-			fprintf(fout, "close: %ld thread %lu\n", sc.close.timeout, sc.thread_id);
+			fprintf(fout, "close: %ld thread %lu", sc.close.timeout, sc.thread_id);
 		}else if (sc.type == DERAND_SOCKCALL_TYPE_SPLICE_READ){
-			fprintf(fout, "splice_read: 0x%x %lu thread %lu\n", sc.splice_read.flags, sc.splice_read.size, sc.thread_id);
+			fprintf(fout, "splice_read: 0x%x %lu thread %lu", sc.splice_read.flags, sc.splice_read.size, sc.thread_id);
 		}else if (sc.type == DERAND_SOCKCALL_TYPE_SETSOCKOPT){
 			if (valid_rec_setsockopt(&sc.setsockopt)){
 				fprintf(fout, "setsockopt: %hhu %hhu %hhu ", sc.setsockopt.level, sc.setsockopt.optname, sc.setsockopt.optlen);
 				for (int j = 0; j < sc.setsockopt.optlen; j++)
 					fprintf(fout, " %hhx", sc.setsockopt.optval[j]);
 				fprintf(fout, " thread %lu", sc.thread_id);
-				fprintf(fout, "\n");
 			}else 
 				fprintf(fout, "Error: unsupported setsockopt\n");
 		}
+		#if GET_TS_PER_SOCKCALL
+		fprintf(fout, " ts:%lu", sc.ts);
+		#endif
+		#if GET_WRITE_SEQ_PER_SOCKCALL
+		fprintf(fout, " write_seq:%u snd_una:%u snd_nxt:%u", sc.write_seq, sc.snd_una, sc.snd_nxt);
+		#endif
+		#if GET_BOTTLENECK
+		fprintf(fout, " lmt[net:%u,%u rcv:%u,%u other:%u,%u]", sc.net, sc.app_net, sc.recv, sc.app_recv, sc.other, sc.app_other);
+		#endif
+		fprintf(fout, "\n");
 	}
 	fprintf(fout, "%lu events\n", evts.size());
 	for (int i = 0; i < evts.size(); i++){
@@ -478,6 +489,20 @@ void Records::print(FILE* fout){
 	fprintf(fout, "%lu drops\n", dpq.size());
 	for (uint32_t i = 0; i < dpq.size(); i++)
 		fprintf(fout, "%u\n", dpq[i]);
+
+	#if GET_REORDER
+	{
+		fprintf(fout, "reorder:\n");
+		for (uint32_t i = 0; i < reorder.size(); ){
+			ReorderPeriod *r = (ReorderPeriod*)&reorder[i];
+			fprintf(fout, "min=%u max=%u:", r->min, r->max);
+			for (uint32_t j = 0; j < r->len; j++)
+				fprintf(fout, " %u", r->order[j] + r->start);
+			fprintf(fout, "\n");
+			i += size_of_ReorderPeriod(r);
+		}
+	}
+	#endif
 
 	#if GET_RX_PKT_IDX
 	fprintf(fout, "%lu rpq\n", rpq.size());
@@ -533,23 +558,6 @@ void Records::print(FILE* fout){
 			fprintf(fout, "\n");
 		}
 	}
-
-	#if DERAND_DEBUG
-	fprintf(fout, "%lu general events\n", geq.size());
-	for (int i = 0; i < geq.size(); i++){
-		u32 type = geq[i].type;
-		u64 data = *(u64*)geq[i].data;
-		char buf[32];
-		fprintf(fout, "%d ", i);
-		// 0: evtq; 1: jfq; 2: mpq; 3: maq; 4: saq; 5: msq; 6 ~ 6+DERAND_EFFECT_BOOL_N_LOC-1: ebq
-		fprintf(fout, "%s", get_ge_name(type, buf));
-		if (type == 0)
-			fprintf(fout, " %s", get_event_name(data, buf));
-		else
-			fprintf(fout, " %lu", data);
-		fprintf(fout, "\n");
-	}
-	#endif
 
 	#if ADVANCED_EVENT_ENABLE
 	fprintf(fout, "%lu u32 for advanced events\n", aeq.size());
@@ -705,6 +713,9 @@ void Records::clear(){
 	evts.clear();
 	sockcalls.clear();
 	dpq.clear();
+	#if GET_REORDER
+	reorder.clear();
+	#endif
 	#if GET_RX_PKT_IDX
 	rpq.clear();
 	#endif
@@ -722,9 +733,6 @@ void Records::clear(){
 	#endif
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		ebq[i].clear();
-	#if DERAND_DEBUG
-	geq.clear();
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	aeq.clear();
 	#endif
@@ -784,6 +792,10 @@ void Records::print_raw_storage_size(){
 	printf("sockcalls: %lu\n", sizeof(derand_rec_sockcall) * sockcalls.size());
 	//size += sizeof(uint32_t) * dpq.size();
 	//printf("dpq: %lu\n", sizeof(uint32_t) * dpq.size());
+	#if GET_REORDER
+	size += sizeof(uint8_t) * reorder.size();
+	printf("reorder: %lu\n", sizeof(uint8_t) * reorder.size());
+	#endif
 	size += sizeof(jiffies_rec) * jiffies.size();
 	printf("jiffies: %lu\n", sizeof(jiffies_rec) * jiffies.size());
 	size += mpq.raw_storage_size();
@@ -1003,6 +1015,10 @@ void Records::print_compressed_storage_size(){
 
 	//size += sizeof(uint32_t) * dpq.size();
 	//printf("dpq: %lu\n", sizeof(uint32_t) * dpq.size());
+
+	#if GET_REORDER
+	//TODO: add reorder size
+	#endif
 
 	{
 		this_size = 64 + nbit_dynamic_coding(jiffies.size());
