@@ -731,8 +731,14 @@ static bool replay_skb_still_in_host_queue(const struct sock *sk, const struct s
 		derand_log("Warning: more skb_still_in_host_queue than recorded\n");
 		ret = false; // usually this is false
 	}else {
+		#if NEW_SIQ
+		u32 idx = get_siq_q_idx(siqq->h);
+		siqq->h++;
+		ret = (siqq->v[idx / 32] >> (idx & 31)) & 1;
+		#else
 		ret = siqq->v[get_siq_q_idx(siqq->h)];
 		siqq->h++;
+		#endif
 	}
 
 	// if true, the kernel code will skip the retransmission, so just return true

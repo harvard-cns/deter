@@ -151,6 +151,10 @@ int Records::dump(const char* filename){
 	if (!dump_vector(siqq, fout))
 		goto fail_write;
 
+	// write siq
+	if (!siq.dump(fout))
+		goto fail_write;
+
 	#if COLLECT_TX_STAMP
 	// write tsq
 	if (!dump_vector(tsq, fout))
@@ -254,6 +258,10 @@ int Records::read(const char* filename){
 
 	// read siqq
 	if (!read_vector(siqq, fin))
+		goto fail_read;
+
+	// read siq
+	if (!siq.read(fin))
 		goto fail_read;
 
 	#if COLLECT_TX_STAMP
@@ -537,6 +545,13 @@ void Records::print(FILE* fout){
 	for (int64_t i = 0; i < siqq.size(); i++)
 		fprintf(fout, "%hhu\n", siqq[i]);
 
+	fprintf(fout, "siq: %u reads %lu\n", siq.n, siq.v.size());
+	for (int64_t i = 0; i < siq.v.size(); i++){
+		for (uint32_t j = 0, b = siq.v[i]; j < 32; j++, b>>=1)
+			fprintf(fout, "%u", b&1);
+		fprintf(fout, "\n");
+	}
+
 	#if COLLECT_TX_STAMP
 	fprintf(fout, "%lu tsq:\n", tsq.size());
 	for (int64_t i = 0; i < tsq.size(); i++)
@@ -725,6 +740,7 @@ void Records::clear(){
 	n_sockets_allocated = 0;
 	mstamp.clear();
 	siqq.clear();
+	siq.clear();
 	#if COLLECT_TX_STAMP
 	tsq.clear();
 	#endif
@@ -806,6 +822,8 @@ void Records::print_raw_storage_size(){
 	printf("mstamp: %lu\n", sizeof(skb_mstamp) * mstamp.size());
 	size += sizeof(uint8_t) * siqq.size();
 	printf("siqq: %lu\n", sizeof(uint8_t) * siqq.size());
+	size += siq.raw_storage_size();
+	printf("siq: %lu\n", siq.raw_storage_size());
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
 		size += ebq[i].raw_storage_size();
 		printf("ebq[%d]: %lu\n", i, ebq[i].raw_storage_size());
@@ -1048,6 +1066,11 @@ void Records::print_compressed_storage_size(){
 		this_size = (nbit_dynamic_coding(siqq.size()) + siqq.size()) / 8;
 		size += this_size;
 		printf("siqq: %lu\n", this_size);
+	}
+	{
+		uint64_t sz = siq.compressed_storage_size();
+		size += sz;
+		printf("siq: %lu\n", sz);
 	}
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
 		uint64_t sz = ebq[i].compressed_storage_size();

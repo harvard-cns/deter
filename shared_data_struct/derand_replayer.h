@@ -4,6 +4,8 @@
 #include "base_struct.h"
 #include "tcp_sock_init_data.h"
 
+#define NEW_SIQ 1
+
 #define EVENT_Q_LEN 32768
 struct event_q{
 	u32 h, t;
@@ -58,12 +60,21 @@ struct effect_bool_q{
 };
 #define get_eb_q_idx(i) ((i) & (EFFECT_BOOL_Q_LEN - 1))
 
+#if NEW_SIQ
+#define SKB_IN_QUEUE_Q_LEN 256
+struct SkbInQueueQ{
+	u32 h, t;
+	u32 v[SKB_IN_QUEUE_Q_LEN/32];
+};
+#define get_siq_q_idx(i) ((i) & (SKB_IN_QUEUE_Q_LEN - 1))
+#else
 #define SKB_IN_QUEUE_Q_LEN 256
 struct SkbInQueueQ{
 	u32 h, t;
 	bool v[SKB_IN_QUEUE_Q_LEN];
 };
 #define get_siq_q_idx(i) ((i) & (SKB_IN_QUEUE_Q_LEN - 1))
+#endif
 
 #if ADVANCED_EVENT_ENABLE
 #define ADVANCED_EVENT_Q_LEN 262144
@@ -90,7 +101,11 @@ struct derand_replayer{
 	struct memory_allocated_q maq;
 	struct mstamp_q msq;
 	struct effect_bool_q ebq[DERAND_EFFECT_BOOL_N_LOC]; // effect_bool
+	#if NEW_SIQ
+	struct SkbInQueueQ siqq;
+	#else
 	struct SkbInQueueQ siqq; // skb_still_in_host_queue
+	#endif
 	#if ADVANCED_EVENT_ENABLE
 	struct AdvancedEventQ aeq;
 	#endif

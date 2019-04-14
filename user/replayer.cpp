@@ -95,6 +95,18 @@ int Replayer::convert_mstamp(){
 }
 
 int Replayer::convert_siqq(){
+	#if NEW_SIQ
+	auto &s = rec.siq;
+	if (s.n > SKB_IN_QUEUE_Q_LEN){
+		fprintf(stderr, "to many siqq: %u > u\n", s.n, SKB_IN_QUEUE_Q_LEN);
+		return -1;
+	}
+	d->siqq.h = 0;
+	d->siqq.t = s.n;
+	if (s.v.size() > 0)
+		memcpy(d->siqq.v, &s.v[0], sizeof(uint32_t) * s.v.size());
+	return 0;
+	#else
 	auto &s = rec.siqq;
 	if (s.size() > SKB_IN_QUEUE_Q_LEN){
 		fprintf(stderr, "too many siqq: %lu > %u\n", s.size(), SKB_IN_QUEUE_Q_LEN);
@@ -105,6 +117,7 @@ int Replayer::convert_siqq(){
 	if (s.size() > 0)
 		memcpy(d->siqq.v, &s[0], sizeof(uint8_t) * s.size());
 	return 0;
+	#endif
 }
 
 int Replayer::convert_effect_bool(){
@@ -308,40 +321,3 @@ void Replayer::start_replay(){
 	printf("finish!\n");
 	//close(sockfd);
 }
-
-/*
-struct derand_replayer{
-	struct tcp_sock_init_data init_data; // initial values for tcp_sock
-	u32 seq;
-	atomic_t sockcall_id; // current socket call ID
-	struct event_q evtq;
-	struct jiffies_q jfq;
-	struct memory_pressure_q mpq;
-	struct memory_allocated_q maq;
-	struct mstamp_q msq;
-	struct effect_bool_q ebq[DERAND_EFFECT_BOOL_N_LOC]; // effect_bool
-};
-
-class Records{
-public:
-	uint32_t recorder_id;
-	uint32_t sip, dip;
-	uint16_t sport, dport;
-	tcp_sock_init_data init_data;
-	std::vector<derand_event> evts;
-	std::vector<derand_rec_sockcall> sockcalls;
-	std::vector<jiffies_rec> jiffies;
-	BitArray memory_pressures;
-	std::vector<memory_allocated_rec> memory_allocated;
-	uint32_t n_sockets_allocated;
-	std::vector<skb_mstamp> mstamp;
-	BitArray effect_bool[DERAND_EFFECT_BOOL_N_LOC];
-
-	Records() : recorder_id(-1) {}
-	int dump(const char* filename = NULL);
-	int read(const char* filename);
-	void print(FILE* fout = stdout);
-	void print_init_data(FILE* fout = stdout);
-	void clear();
-};
-*/
