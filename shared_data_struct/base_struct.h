@@ -3,6 +3,8 @@
 
 #include "tcp_sock_init_data.h"
 
+#define USE_DEPRECATED 0
+
 #define DERAND_DEBUG 0
 #define ADVANCED_EVENT_ENABLE 0
 #define COLLECT_TX_STAMP 1
@@ -18,30 +20,35 @@
 /* Different types of socket calls' ID starts with different highest 4 bits */
 #define DERAND_SOCK_ID_BASE 100
 
-#define DERAND_SOCKCALL_TYPE_SENDMSG 0
+#define DETER_SOCKCALL_TYPE_SENDMSG 0
+#define DERAND_SOCKCALL_TYPE_SENDMSG DETER_SOCKCALL_TYPE_SENDMSG
 struct derand_rec_sockcall_tcp_sendmsg{
 	u8 type;
 	int flags; // msg.msg_flags
 	size_t size;
 };
-#define DERAND_SOCKCALL_TYPE_RECVMSG 1
+#define DETER_SOCKCALL_TYPE_RECVMSG 1
+#define DERAND_SOCKCALL_TYPE_RECVMSG DETER_SOCKCALL_TYPE_RECVMSG
 struct derand_rec_sockcall_tcp_recvmsg{
 	u8 type;
 	int flags; // nonblock | flags
 	size_t size;
 };
-#define DERAND_SOCKCALL_TYPE_CLOSE 2
+#define DETER_SOCKCALL_TYPE_CLOSE 2
+#define DERAND_SOCKCALL_TYPE_CLOSE DETER_SOCKCALL_TYPE_CLOSE
 struct derand_rec_sockcall_tcp_close{
 	u8 type;
 	long timeout;
 };
-#define DERAND_SOCKCALL_TYPE_SPLICE_READ 3
+#define DETER_SOCKCALL_TYPE_SPLICE_READ 3
+#define DERAND_SOCKCALL_TYPE_SPLICE_READ DETER_SOCKCALL_TYPE_SPLICE_READ
 struct derand_rec_sockcall_tcp_splice_read{
 	u8 type;
 	int flags;
 	size_t size;
 };
-#define DERAND_SOCKCALL_TYPE_SETSOCKOPT 4
+#define DETER_SOCKCALL_TYPE_SETSOCKOPT 4
+#define DERAND_SOCKCALL_TYPE_SETSOCKOPT DETER_SOCKCALL_TYPE_SETSOCKOPT
 struct derand_rec_sockcall_setsockopt{
 	u8 type;
 	u8 level;
@@ -208,7 +215,8 @@ union memory_allocated_rec{
 	};
 };
 
-#define DERAND_EFFECT_BOOL_N_LOC 17
+#define DETER_EFFECT_BOOL_N_LOC 17
+#define DERAND_EFFECT_BOOL_N_LOC DETER_EFFECT_BOOL_N_LOC
 
 /* struct general event (for debug): including locking and reading */
 struct GeneralEvent{

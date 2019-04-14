@@ -28,7 +28,7 @@ static int __init record_init(void)
 	mon_ndstip = htonl(ndstip);
 
 	// create record_ctrl data
-	if (create_record_ctrl(N_RECORDER))
+	if (create_record_ctrl())
 		goto fail_create_ctrl;
 
 	// expose data to user space

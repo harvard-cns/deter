@@ -2,80 +2,183 @@
 #include <linux/string.h>
 #include <net/derand.h>
 #include <net/derand_ops.h>
-#include "record_ctrl.h"
-#include "derand_recorder.h"
+#include "deter_recorder.h"
+#include "mem_block_ops.h"
 #include "copy_from_sock_init_val.h"
 #include "logger.h"
+#include "record_shmem.h"
 
 u32 mon_dstip = 0;
 u32 mon_ndstip = 0;
 
-static inline int is_valid_recorder(struct derand_recorder *rec){
-	int idx = rec - (struct derand_recorder*)record_ctrl.addr;
-	return idx >= 0 && idx < record_ctrl.max_sock;
+static inline int is_valid_recorder(struct DeterRecorder *rec){
+	int idx = rec - (struct DeterRecorder*) shmem.addr->recorder;
+	return idx >= 0 && idx < N_RECORDER;
 }
 
-#if ADVANCED_EVENT_ENABLE
-static inline void record_advanced_event(const struct sock *sk, u8 func_num, u8 loc, u8 fmt, int n, ...){
-	u32 i, j;
-	va_list vl;
-	struct AdvancedEventQ* aeq = &((struct derand_recorder*)(sk->recorder))->aeq;
+static inline u32 rec2idx(struct DeterRecorder* rec){
+	return (u32)(rec - shmem.addr->recorder);
+}
+static inline u32 mb2idx(struct MemBlock *mb){
+	return (u32)(mb - shmem.addr->mem_block);
+}
 
-	// store ae header
-	aeq->v[get_aeq_idx(aeq->t)] = get_ae_hdr_u32(func_num, loc, n, fmt);
-	// store data
-	va_start(vl, n);
-	for (i = 1, j = 1<<(n-1); j; i++, j>>=1){
-		if (fmt & j){
-			u64 a = va_arg(vl, u64);
-			aeq->v[get_aeq_idx(aeq->t + i)] = (u32)(a & 0xffffffff);
-			i++;
-			aeq->v[get_aeq_idx(aeq->t + i)] = (u32)(a >> 32);
-		}else{
-			aeq->v[get_aeq_idx(aeq->t + i)] = va_arg(vl, int);
-		}
+// TODO: potential concurrency bug here: this is a multi-consumer queue
+//		 Do a test of h < t before the atomic add would help, because it solves 2 concurrent consumer case, which is already rare, and >2 concurrent consumer is super rare...
+static void* deter_alloc_recorder(void){
+	atomic_t *h = (atomic_t*)&shmem.addr->free_rec_ring.h;
+	u32 ring_idx = atomic_add_return(1, h) - 1; // use atomic_add_return, so concurrent callers are guaranteed to get diff ring_idx
+	u32 rec_idx;
+	// if not enough free recorder, dec h back.
+	if (ring_idx >= (u32)shmem.addr->free_rec_ring.t){// it is fine to directly read t here (not atomic_read), because this won't cause error
+		atomic_dec(h);
+		return NULL;
 	}
-	va_end(vl);
-	wmb();
-	aeq->t += i;
-}
-#endif
-
-// allocate memory for a socket
-static void* derand_alloc_mem(void){
-	void* ret = NULL;
-	int n;
-
-	spin_lock_bh(&record_ctrl.lock);
-	if (record_ctrl.top == 0)
-		goto out;
-
-	n = record_ctrl.stack[--record_ctrl.top];
-	ret = record_ctrl.addr + n; // * sizeof(struct derand_recorder);
-out:
-	spin_unlock_bh(&record_ctrl.lock);
-	return ret;
+	// we know this slot (ring_idx) in the ring is valid (won't be written by user), because the ring is large enough to contain N_RECORDER recorder
+	rec_idx = shmem.addr->free_rec_ring.v[get_rec_ring_idx(ring_idx)];
+	return &shmem.addr->recorder[rec_idx];
 }
 
-/* create a derand_recorder.
+// TODO: potential concurrency bug here: this is a multi-consumer queue
+//		 Do a test of h < t before the atomic add would help, because it solves 2 concurrent consumer case, which is already rare, and >2 concurrent consumer is super rare...
+static inline struct MemBlock* get_free_mem_block(void){
+	struct FreeMemBlockRing *ring = &shmem.addr->free_mb_ring;
+	atomic_t *h = (atomic_t*)&ring->h;
+	u32 ring_idx = atomic_add_return(1, h) - 1; // use atomic_add_return, so concurrent callers are guaranteed to get diff ring_idx
+	u32 mb_idx;
+	// if not enough free MemBlock, dec h back.
+	if (ring_idx >= (u32)atomic_read((atomic_t*)&ring->t)){
+		atomic_dec(h);
+		return NULL;
+	}
+	// we know this slot (ring_idx) in the ring is valid (won't be written by user), because the ring is large enough to contain N_MEM_BLOCK mb
+	mb_idx = ring->v[get_free_mb_ring_idx(ring_idx)];
+	return &shmem.addr->mem_block[mb_idx];
+}
+
+static inline struct MemBlock* get_and_init_mem_block(struct DeterRecorder* rec, u8 type){
+	struct MemBlock* mb = get_free_mem_block();
+	if (mb){
+		mb->len = 0;
+		mb->type = type;
+		mb->rec_id = rec2idx(rec);
+		rec->used_mb++;
+	}
+	return mb;
+}
+
+static inline void put_done_mem_block(struct MemBlock* mb){
+	struct DoneMemBlockRing *ring = &shmem.addr->done_mb_ring;
+	atomic_t *t_mp = (atomic_t*)&ring->t_mp;
+	u32 ring_idx = atomic_add_return(1, t_mp) - 1;
+	// there is not need to check if the ring has enough space, because the ring is large enough
+	ring->v[get_done_mb_ring_idx(ring_idx)] = mb2idx(mb);
+	while (atomic_read((atomic_t*)&ring->t) != ring_idx); // if the condition is true, there are other concurrent putters that get lower ring_idx; wait for them to finish
+	atomic_inc((atomic_t*)&ring->t);
+}
+
+/* 
+ * Set of push_* functions that first check mb space, put done and get a new mb if necessary, and push data to the mb.
+ * Functions includes:
+ *     push_bit(struct DeterRecorder*rec, struct MemBlock** cur, u8 type, u8 x)
+ *     push_u8(struct DeterRecorder*rec, struct MemBlock** cur, u8 type, u8 x)
+ *     push_u16(struct DeterRecorder*rec, struct MemBlock** cur, u8 type, u16 x)
+ *     push_u32(struct DeterRecorder*rec, struct MemBlock** cur, u8 type, u32 x)
+ *     push_u64(struct DeterRecorder*rec, struct MemBlock** cur, u8 type, u64 x)
+ *     push_nbyte(struct DeterRecorder*rec, struct MemBlock** cur, u8 type, u32 nbyte, void* addr)
+ */
+#define DEFINE_PUSH_BLOCK_FUNC(name, tp)\
+static inline void push_##name(struct DeterRecorder* rec, struct MemBlock** cur, u8 type, tp x){\
+	if (!check_space_##name##_block(*cur)){ \
+		put_done_mem_block(*cur); \
+		while ((*cur = get_and_init_mem_block(rec, type)) == NULL); \
+	} \
+	push_##name##_block((*cur), x); \
+}
+
+DEFINE_PUSH_BLOCK_FUNC(bit, u8);
+DEFINE_PUSH_BLOCK_FUNC(u8, u8);
+DEFINE_PUSH_BLOCK_FUNC(u16, u16);
+DEFINE_PUSH_BLOCK_FUNC(u32, u32);
+DEFINE_PUSH_BLOCK_FUNC(u64, u64);
+
+static inline void push_nbyte(struct DeterRecorder *rec, struct MemBlock** cur, u8 type, u32 nbyte, void* addr){
+	if (!check_space_nbyte_block((*cur), nbyte)){
+		put_done_mem_block(*cur);
+		while ((*cur = get_and_init_mem_block(rec, type)) == NULL);
+	}
+	push_nbyte_block(*cur, nbyte, addr);
+}
+
+/* 
+ * n: number of MemBlock to get
+ * v: the return vector of free MemBlock (this vector memory should be allocated by the caller)
+ * TODO: potential concurrency bug here, same as get_free_mem_block above
+ */
+static inline bool get_n_free_mem_block(u32 n, struct MemBlock **v){
+	struct FreeMemBlockRing *mb_ring = &shmem.addr->free_mb_ring;
+	atomic_t *h = (atomic_t*)&mb_ring->h;
+	u32 ring_idx = atomic_add_return(n, h) - n; // use atomic_add_return, so concurrent callers are guaranteed to get diff ring_idx
+	u32 i;
+	// if not enough free MemBlock, subtract n from h.
+	if (ring_idx + n > (u32)atomic_read((atomic_t*)&mb_ring->t)){
+		atomic_sub(n, h);
+		return false;
+	}
+	// we know these slots (ring_idx to ring_idx+n) in the ring is valid (won't be written by user), because the ring is large enough to contain N_MEM_BLOCK mb
+	for (i = 0; i < n; i++){
+		u32 mb_idx = mb_ring->v[get_free_mb_ring_idx(ring_idx + i)];
+		v[i] = &shmem.addr->mem_block[mb_idx];
+	}
+	return true;
+}
+
+static inline bool init_recorder_mb(struct DeterRecorder* rec){
+	u32 i;
+	struct MemBlock* mbs[DETER_MEM_BLOCK_TYPE_TOTAL];
+	// get a mb for each type of data
+	if (!get_n_free_mem_block(DETER_MEM_BLOCK_TYPE_TOTAL, mbs))
+		return false;
+	// init each mb
+	for (i = 0; i < DETER_MEM_BLOCK_TYPE_TOTAL; i++){
+		mbs[i]->len = 0;
+		mbs[i]->rec_id = rec2idx(rec);
+		rec->used_mb++;
+	}
+	// assign mb to recorder
+	rec->evt.mb = mbs[0];		mbs[0]->type = DETER_MEM_BLOCK_TYPE_EVT;
+	rec->sockcall.mb = mbs[1];	mbs[1]->type = DETER_MEM_BLOCK_TYPE_SOCKCALL;
+	rec->dp.mb = mbs[2];		mbs[2]->type = DETER_MEM_BLOCK_TYPE_DP;
+	rec->jif.mb = mbs[3];		mbs[3]->type = DETER_MEM_BLOCK_TYPE_JIF;
+	rec->mp.mb = mbs[4];		mbs[4]->type = DETER_MEM_BLOCK_TYPE_MP;
+	rec->ma.mb = mbs[5];		mbs[5]->type = DETER_MEM_BLOCK_TYPE_MA;
+	rec->ms.mb = mbs[6];		mbs[6]->type = DETER_MEM_BLOCK_TYPE_MS;
+	rec->siq.mb = mbs[7];		mbs[7]->type = DETER_MEM_BLOCK_TYPE_SIQ;
+	rec->ts.mb = mbs[8];		mbs[8]->type = DETER_MEM_BLOCK_TYPE_TS;
+	for (i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++){
+		rec->eb[i].mb = mbs[9+i]; mbs[9+i]->type = DETER_MEM_BLOCK_TYPE_EB(i);
+	}
+	#if ADVANCED_EVENT_ENABLE
+	rec->ae.mb = mbs[9 + DETER_EFFECT_BOOL_N_LOC + 1];
+	#endif
+	return true;
+}
+
+/* get a DeterRecorder.
  * Called when a connection is successfully built
  * i.e., after receiving SYN-ACK at client and after receiving ACK at server.
  * So this function is called in bottom-half, so we must not block*/
 static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	int i;
 
-	// create derand_recorder
-	struct derand_recorder *rec = derand_alloc_mem();
+	// create DeterRecorder
+	struct DeterRecorder *rec = deter_alloc_recorder();
 	if (!rec){
-		printk("[recorder_create] sport = %hu, dport = %hu, fail to create recorder. top=%d\n", ntohs(inet_sk(sk)->inet_sport), ntohs(inet_sk(sk)->inet_dport), record_ctrl.top);
+		printk("[recorder_create] sport = %hu, dport = %hu, fail to create recorder. h=%u t=%u\n", ntohs(inet_sk(sk)->inet_sport), ntohs(inet_sk(sk)->inet_dport), shmem.addr->free_rec_ring.h, shmem.addr->free_rec_ring.t);
 		goto out;
 	}
-	printk("[recorder_create] sport = %hu, dport = %hu, succeed to create recorder. top=%d\n", ntohs(inet_sk(sk)->inet_sport), ntohs(inet_sk(sk)->inet_dport), record_ctrl.top);
-	sk->recorder = rec;
-
-	// set broken to 0;
-	rec->broken = 0;
-	rec->alert = 0;
+	printk("[recorder_create] sport = %hu, dport = %hu, succeed to create recorder. h=%u t=%u\n", ntohs(inet_sk(sk)->inet_sport), ntohs(inet_sk(sk)->inet_dport), shmem.addr->free_rec_ring.h, shmem.addr->free_rec_ring.t);
+	sk->recorder = (void*)rec;
 
 	// record 4 tuples
 	rec->sip = inet_sk(sk)->inet_saddr;
@@ -100,8 +203,29 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	rec->pkt_idx.fin = 0;
 
 	// init variables
+	rec->broken = rec->alert = 0;
+	rec->used_mb = rec->dump_mb = 0;
 	rec->seq = 0;
 	atomic_set(&rec->sockcall_id, 0);
+	atomic_set(&rec->sockcall_id_mp, 0);
+	// get and init MemBlock for each type of data
+	while (!init_recorder_mb(rec)); // ensure we get enough valid mb
+
+	// init runtime states
+	rec->evt.n = rec->sockcall.n = rec->dp.n = rec->jif.n = rec->mp.n = rec->ma.n = rec->ms.n = rec->siq.n = 0;
+	for (i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++)
+		rec->eb[i].n = 0;
+	#if COLLECT_TX_STAMP
+	rec->ts.n = 0;
+	#endif
+	#if ADVANCED_EVENT_ENABLE
+	rec->ae.n = 0;
+	#endif
+	// init jif and ma specific runtime state
+	rec->jif.last_jiffies = rec->jif.idx_delta = 0;
+	rec->ma.last_v = rec->ma.idx_delta = 0;
+
+	#if USE_DEPRECATED
 	rec->evt_h = rec->evt_t = 0;
 	rec->sc_h = rec->sc_t = 0;
 	rec->dpq.h = rec->dpq.t = 0;
@@ -134,13 +258,12 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	rec->net = rec->recv = rec->other = 0;
 	rec->last_bottleneck_update_time = ktime_get().tv64;
 	#endif
+	#endif /* USE_DEPRECATED */
 	if (mode == 0)
 		copy_from_server_sock(sk); // copy sock init data
 	else 
 		copy_from_client_sock(sk);
 	rec->mode = mode;
-	wmb();
-	rec->recorder_id++;
 out:
 	return;
 }
@@ -164,7 +287,7 @@ static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 }
 
 #if GET_BOTTLENECK
-static inline void record_bottleneck(struct sock *sk, struct derand_recorder *rec){
+static inline void record_bottleneck(struct sock *sk, struct DeterRecorder *rec){
 	struct tcp_sock *tp = tcp_sk(sk);
 	u64 now = ktime_get().tv64;
 	if (tp->snd_una != tp->write_seq){ // active
@@ -191,15 +314,27 @@ static inline void record_bottleneck(struct sock *sk, struct derand_recorder *re
 
 /* this function should be called in thread_safe environment */
 static inline void new_event(struct sock *sk, u32 type){
-	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
+	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
 	u32 seq;
+	#if USE_DEPRECATED
 	u32 idx;
+	#endif
+	union{
+		u64 u;
+		struct derand_event e;
+	}dt;
 	if (!rec)
 		return;
 
 	// increment the seq #
 	seq = rec->seq++;
 
+	dt.e.seq = seq;
+	dt.e.type = type;
+	push_u64(rec, &rec->evt.mb, DETER_MEM_BLOCK_TYPE_EVT, dt.u);
+	rec->evt.n++;
+
+	#if USE_DEPRECATED
 	// enqueue the new event
 	idx = get_evt_q_idx(rec->evt_t);
 	#if DERAND_DEBUG
@@ -220,17 +355,19 @@ static inline void new_event(struct sock *sk, u32 type){
 	#if GET_BOTTLENECK
 	record_bottleneck(sk, rec);
 	#endif
+	#endif /* USE_DEPRECATED */
 }
 
 #if GET_REORDER
 /* declaration for function that ends reorder buffer */
-static void end_reorder(struct derand_recorder *rec);
+static void end_reorder(struct DeterRecorder *rec);
 #endif
 
-/* destruct a derand_recorder.
+/* destruct a DeterRecorder.
  */
 static void recorder_destruct(struct sock *sk){
-	struct derand_recorder* rec = sk->recorder;
+	struct DeterRecorder* rec = sk->recorder;
+	int i;
 	if (!rec){
 		//printk("[recorder_destruct] sport = %hu, dport = %hu, recorder is NULL.\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		return;
@@ -244,23 +381,68 @@ static void recorder_destruct(struct sock *sk){
 	// add a finish event
 	new_event(sk, EVENT_TYPE_FINISH);
 
-	// update recorder_id
-	rec->recorder_id++;
+	// finish jiffies
+	if (rec->jif.idx_delta > 0){
+		union {
+			u64 u;
+			union jiffies_rec jf_rec;
+		}dt_jf;
+		dt_jf.jf_rec.jiffies_delta = 0;
+		dt_jf.jf_rec.idx_delta = rec->jif.idx_delta;
+		push_u64(rec, &rec->jif.mb, DETER_MEM_BLOCK_TYPE_JIF, dt_jf.u);
+		rec->jif.n++;
+	}
 
-	// recycle this recorder
-	spin_lock_bh(&record_ctrl.lock);
-	record_ctrl.stack[record_ctrl.top++] = (rec - record_ctrl.addr); // / sizeof(struct derand_recorder);
-	spin_unlock_bh(&record_ctrl.lock);
+	// finish memory_allocated
+	if (rec->ma.idx_delta > 0){
+		union{
+			u64 u;
+			union memory_allocated_rec ma_rec;
+		}dt_ma;
+		dt_ma.ma_rec.v_delta = 0;
+		dt_ma.ma_rec.idx_delta = rec->ma.idx_delta;
+		push_u64(rec, &rec->ma.mb, DETER_MEM_BLOCK_TYPE_MA, dt_ma.u);
+		rec->ma.n++;
+	}
+
+	// put mb to done_mb_ring
+	put_done_mem_block(rec->evt.mb);
+	put_done_mem_block(rec->sockcall.mb);
+	put_done_mem_block(rec->dp.mb);
+	put_done_mem_block(rec->jif.mb);
+	put_done_mem_block(rec->mp.mb);
+	put_done_mem_block(rec->ma.mb);
+	put_done_mem_block(rec->ms.mb);
+	put_done_mem_block(rec->siq.mb);
+	put_done_mem_block(rec->ts.mb);
+	for (i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++)
+		put_done_mem_block(rec->eb[i].mb);
+	#if ADVANCED_EVENT_ENABLE
+	put_done_mem_block(rec->ae.mb);
+	#endif
 
 	// remove the recorder from sk
 	sk->recorder = NULL;
-	printk("[recorder_destruct] sport = %hu, dport = %hu, succeed to destruct a recorder. top=%d\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport, record_ctrl.top);
+	printk("[recorder_destruct] sport = %hu, dport = %hu, succeed to destruct a recorder.\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 }
 
 /******************************************
  * sockcall
  *****************************************/
-static inline void update_sc_t(struct derand_recorder *rec, int sc_id){
+static inline void put_sockcall(struct DeterRecorder *rec, int sc_id, struct derand_rec_sockcall* sc){
+	if (atomic_read(&rec->sockcall_id_mp) != sc_id){
+		u32 cnt = 0;
+		for (;atomic_read(&rec->sockcall_id_mp) != sc_id; cnt++){
+			if ((cnt & 0x0fffffff) == 0)
+				printk("long wait for sockcall_id_mp: %d sc_id %d\n", atomic_read(&rec->sockcall_id_mp), sc_id);
+		}
+	}
+	push_nbyte(rec, &rec->sockcall.mb, DETER_MEM_BLOCK_TYPE_SOCKCALL, sizeof(struct derand_rec_sockcall), sc);
+	rec->sockcall.n++;
+	atomic_inc(&rec->sockcall_id_mp);
+}
+#if USE_DEPRECATED
+static inline void update_sc_t(struct DeterRecorder *rec, int sc_id){
 	// make sure sockcall data is written, before we inc sc_t
 	wmb();
 	if (rec->sc_t != sc_id){
@@ -275,9 +457,13 @@ static inline void update_sc_t(struct derand_recorder *rec, int sc_id){
 	}
 	atomic_inc((atomic_t*)&rec->sc_t);
 }
+#endif /* USE_DEPRECATED */
 static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
-	struct derand_recorder* rec = sk->recorder;
+	struct DeterRecorder* rec = sk->recorder;
+	struct derand_rec_sockcall sc;
+	#if USE_DEPRECATED
 	struct derand_rec_sockcall *rec_sc;
+	#endif
 	int sc_id;
 
 	if (!rec)
@@ -285,6 +471,14 @@ static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 
 	// get sockcall ID
 	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
+
+	sc.type = DERAND_SOCKCALL_TYPE_SENDMSG;
+	sc.sendmsg.flags = msg->msg_flags;
+	sc.sendmsg.size = size;
+	sc.thread_id = (u64)current;
+	put_sockcall(rec, sc_id, &sc);
+
+	#if USE_DEPRECATED
 	// get record for storing this sockcall
 	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)]; // we have to store it at idx sc_id, not sc_t: because 2 sockcall may be concurrent, so sc_t may not = sc_id
 	// store data for this sockcall
@@ -310,13 +504,14 @@ static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	#endif
 	// update sc_t
 	update_sc_t(rec, sc_id);
+	#endif /* USE_DEPRECATED */
 	// return sockcall ID 
 	return sc_id;
 }
 
 #if 0
 static u32 new_sendpage(struct sock *sk, int offset, size_t size, int flags){
-	struct derand_recorder* rec = sk->recorder;
+	struct DeterRecorder* rec = sk->recorder;
 	if (!rec)
 		return 0;
 	printk("[DERAND] %hu %hu: tcp_sendpage %d %lu %x!!!\n", ntohs(rec->sport), ntohs(rec->dport), offset, size, flags);
@@ -325,8 +520,11 @@ static u32 new_sendpage(struct sock *sk, int offset, size_t size, int flags){
 #endif
 
 static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock, int flags, int *addr_len){
-	struct derand_recorder* rec = sk->recorder;
+	struct DeterRecorder* rec = sk->recorder;
+	struct derand_rec_sockcall sc;
+	#if USE_DEPRECATED
 	struct derand_rec_sockcall *rec_sc;
+	#endif
 	int sc_id;
 
 	if (!rec)
@@ -334,6 +532,15 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 
 	// get sockcall ID
 	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
+
+	// store data for this sockcall
+	sc.type = DERAND_SOCKCALL_TYPE_RECVMSG;
+	sc.recvmsg.flags = nonblock | flags;
+	sc.recvmsg.size = len;
+	sc.thread_id = (u64)current;
+	put_sockcall(rec, sc_id, &sc);
+
+	#if USE_DEPRECATED
 	// get record for storing this sockcall
 	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
 	// store data for this sockcall
@@ -351,13 +558,17 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 	#endif
 	// update sc_t
 	update_sc_t(rec, sc_id);
+	#endif /* USE_DEPRECATED */
 	// return sockcall ID
 	return sc_id;
 }
 
 static u32 new_splice_read(struct sock *sk, size_t len, unsigned int flags){
-	struct derand_recorder* rec = sk->recorder;
+	struct DeterRecorder* rec = sk->recorder;
+	struct derand_rec_sockcall sc;
+	#if USE_DEPRECATED
 	struct derand_rec_sockcall *rec_sc;
+	#endif
 	int sc_id;
 
 	if (!rec)
@@ -365,6 +576,15 @@ static u32 new_splice_read(struct sock *sk, size_t len, unsigned int flags){
 
 	// get sockcall ID
 	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
+
+	// store data for this sockcall
+	sc.type = DERAND_SOCKCALL_TYPE_SPLICE_READ;
+	sc.splice_read.flags = flags;
+	sc.splice_read.size = len;
+	sc.thread_id = (u64)current;
+	put_sockcall(rec, sc_id, &sc);
+
+	#if USE_DEPRECATED
 	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
 	// store data for this sockcall
 	rec_sc->type = DERAND_SOCKCALL_TYPE_SPLICE_READ;
@@ -381,19 +601,31 @@ static u32 new_splice_read(struct sock *sk, size_t len, unsigned int flags){
 	#endif
 	// update sc_t
 	update_sc_t(rec, sc_id);
+	#endif /* USE_DEPRECATED */
 	// return sockcall ID
 	return sc_id;
 }
 
 static u32 new_close(struct sock *sk, long timeout){
-	struct derand_recorder* rec = sk->recorder;
+	struct DeterRecorder* rec = sk->recorder;
+	struct derand_rec_sockcall sc;
+	#if USE_DEPRECATED
 	struct derand_rec_sockcall *rec_sc;
+	#endif
 	int sc_id;
 
 	if (!rec)
 		return 0;
 	// get sockcall ID
 	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
+
+	// store data for this sockcall
+	sc.type = DERAND_SOCKCALL_TYPE_CLOSE;
+	sc.close.timeout = timeout;
+	sc.thread_id = (u64)current;
+	put_sockcall(rec, sc_id, &sc);
+
+	#if USE_DEPRECATED
 	// get record for storing this sockcall
 	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
 	// store data for this sockcall
@@ -418,19 +650,37 @@ static u32 new_close(struct sock *sk, long timeout){
 	#endif
 	// update sc_t
 	update_sc_t(rec, sc_id);
+	#endif /* USE_DEPRECATED */
 	// return sockcall ID
 	return sc_id;
 }
 
 static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *optval, unsigned int optlen){
-	struct derand_recorder* rec = sk->recorder;
+	struct DeterRecorder* rec = sk->recorder;
+	struct derand_rec_sockcall sc;
+	#if USE_DEPRECATED
 	struct derand_rec_sockcall *rec_sc;
+	#endif
 	int sc_id;
 
 	if (!rec)
 		return 0;
 	// get sockcall ID
 	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
+
+	// store data for this sockcall
+	sc.type = DERAND_SOCKCALL_TYPE_SETSOCKOPT;
+	if ((u32)level > 255 || (u32)optname > 255 || (u32)optlen > 12){ // use u32 so that negative values are also considered
+		sc.setsockopt.level = sc.setsockopt.optname = sc.setsockopt.optlen = 255;
+	}else {
+		sc.setsockopt.level = level;
+		sc.setsockopt.optname = optname;
+		sc.setsockopt.optlen = optlen;
+		copy_from_user(sc.setsockopt.optval, optval, optlen);
+	}
+	put_sockcall(rec, sc_id, &sc);
+
+	#if USE_DEPRECATED
 	// get record for storing this sockcall
 	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
 	// store data for this sockcall
@@ -454,6 +704,7 @@ static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *
 	#endif
 	// update sc_t
 	update_sc_t(rec, sc_id);
+	#endif /* USE_DEPRECATED */
 	// return sockcall ID
 	return sc_id;
 }
@@ -468,7 +719,7 @@ static void sockcall_lock(struct sock *sk, u32 sc_id){
 
 /* incoming packets do not need to record their seq # */
 static void incoming_pkt(struct sock *sk){
-	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
+	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
 	if (!rec)
 		return;
 	#if GET_BOTTLENECK
@@ -497,7 +748,7 @@ static void tasklet(struct sock *sk){
  * monitor network action: drop & ecn
  *******************************************/
 #if COLLECT_RX_STAMP
-static inline void rx_stamp(struct derand_recorder *rec){
+static inline void rx_stamp(struct DeterRecorder *rec){
 	u64 clock = local_clock();
 	rec->rsq.v[get_rsq_idx(rec->rsq.t)] = clock;
 	wmb();
@@ -509,7 +760,7 @@ static inline void rx_stamp(struct derand_recorder *rec){
 static inline u32 get_map_idx(u32 idx){
 	return idx & (DERAND_MAX_REORDER - 1);
 }
-static inline void start_new_reorder(struct derand_recorder *rec){
+static inline void start_new_reorder(struct DeterRecorder *rec){
     // TODO to optimize: struct align 4 bytes
     struct ReorderPeriod *r = rec->reorder.period = (struct ReorderPeriod*)(rec->reorder.buf + get_reorder_buf_idx(rec->reorder.buf_idx));
     rec->reorder.ascending = 1;
@@ -517,7 +768,7 @@ static inline void start_new_reorder(struct derand_recorder *rec){
     r->len = 0;
 }
 
-static inline void dump_reorder(struct derand_recorder *rec){
+static inline void dump_reorder(struct DeterRecorder *rec){
     // if all packets in the buffer is ascending, no need to record
     if (rec->reorder.ascending){
         rec->reorder.period = NULL;
@@ -562,7 +813,7 @@ static inline void dump_reorder(struct derand_recorder *rec){
 	rec->reorder.t += size;
 }
 
-static inline void add_to_reorder(struct derand_recorder *rec, uint32_t idx){
+static inline void add_to_reorder(struct DeterRecorder *rec, uint32_t idx){
 	struct ReorderPeriod *r = rec->reorder.period;
 	if (r->len > 0)
 		rec->reorder.ascending &= (r->start + r->order[r->len-1] < idx);
@@ -572,7 +823,7 @@ static inline void add_to_reorder(struct derand_recorder *rec, uint32_t idx){
 		rec->reorder.max_id = idx;
 }
 
-static inline void pop_till(struct derand_recorder *rec, uint32_t till){
+static inline void pop_till(struct DeterRecorder *rec, uint32_t till){
     while (rec->reorder.left <= till){
         if (!rec->reorder.map[get_map_idx(rec->reorder.left)]){ // if not appear, mark as drop
             rec->dpq.v[get_drop_q_idx(rec->dpq.t)] = rec->reorder.left;
@@ -588,7 +839,7 @@ static inline void pop_till(struct derand_recorder *rec, uint32_t till){
         rec->pkt_idx.idx++;
     }
 }
-static void end_reorder(struct derand_recorder *rec){
+static void end_reorder(struct DeterRecorder *rec){
 	if (rec->reorder.period){
 		pop_till(rec, rec->reorder.max_id);
 		dump_reorder(rec);
@@ -597,7 +848,7 @@ static void end_reorder(struct derand_recorder *rec){
 #endif /* GET_REORDER */
 
 void mon_net_action(struct sock *sk, struct sk_buff *skb){
-	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
+	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
 	u16 ipid, gap;
 	u32 i, idx;
 	struct iphdr *iph = ip_hdr(skb);
@@ -681,35 +932,124 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 		rec->pkt_idx.idx++;
 	}
 	#else
+	for (i = 1; i < gap; i++){
+		push_u32(rec, &rec->dp.mb, DETER_MEM_BLOCK_TYPE_DP, idx + i);
+		rec->dp.n++;
+	}
+	#if USE_DEPRECATED
 	// record drops
 	for (i = 1; i < gap; i++){
 		rec->dpq.v[get_drop_q_idx(rec->dpq.t)] = idx + i;
 		wmb();
 		rec->dpq.t++;
 	}
+	#endif /* USE_DEPRECATED */
 	update_pkt_idx(&rec->pkt_idx, ipid);
 	#endif
 }
 
 void record_fin_seq(struct sock *sk){
-	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
+	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
 	if (!rec)
 		return;
 	rec->pkt_idx.fin_v64 = tcp_sk(sk)->write_seq | (0x100000000);
 }
 
+#if ADVANCED_EVENT_ENABLE
+/***********************************************
+ * Advanced event. Used for debugging.
+ **********************************************/
+static inline void record_advanced_event(const struct sock *sk, u8 func_num, u8 loc, u8 fmt, int n, ...){
+	u32 i, j;
+	va_list vl;
+	struct DeterRecorder *rec = (struct DeterRecorder*)(sk->recorder);
+	#if USE_DEPRECATED
+	struct AdvancedEventQ* aeq = &((struct DeterRecorder*)(sk->recorder))->aeq;
+	#endif
+
+	// store ae header
+	push_u32(rec, &rec->ae.mb, DETER_MEM_BLOCK_TYPE_AE, get_ae_hdr_u32(func_num, loc, n, fmt));
+	rec->ae.n++;
+	// store data
+	va_start(vl, n);
+	for (i = 1, j = 1<<(n-1); j; i++, j>>=1){
+		if (fmt & j){
+			u64 a = va_arg(vl, u64);
+			push_u32(rec, &rec->ae.mb, DETER_MEM_BLOCK_TYPE_AE, (u32)(a & 0xffffffff));
+			rec->ae.n++;
+			i++;
+			push_u32(rec, &rec->ae.mb, DETER_MEM_BLOCK_TYPE_AE, (u32)(a >> 32));
+			rec->ae.n++;
+		}else{
+			push_u32(rec, &rec->ae.mb, DETER_MEM_BLOCK_TYPE_AE, va_arg(vl, int));
+			rec->ae.n++;
+		}
+	}
+	va_end(vl);
+
+	#if USE_DEPRECATED
+	// store ae header
+	aeq->v[get_aeq_idx(aeq->t)] = get_ae_hdr_u32(func_num, loc, n, fmt);
+	// store data
+	va_start(vl, n);
+	for (i = 1, j = 1<<(n-1); j; i++, j>>=1){
+		if (fmt & j){
+			u64 a = va_arg(vl, u64);
+			aeq->v[get_aeq_idx(aeq->t + i)] = (u32)(a & 0xffffffff);
+			i++;
+			aeq->v[get_aeq_idx(aeq->t + i)] = (u32)(a >> 32);
+		}else{
+			aeq->v[get_aeq_idx(aeq->t + i)] = va_arg(vl, int);
+		}
+	}
+	va_end(vl);
+	wmb();
+	aeq->t += i;
+	#endif /* USE_DEPRECATED */
+}
+#endif
+
 /***********************************************
  * shared variables
  **********************************************/
 static void _read_jiffies(const struct sock *sk, unsigned long v, int id){
-	struct derand_recorder* rec = sk->recorder;
+	struct DeterRecorder* rec = sk->recorder;
+	union {
+		u64 u;
+		union jiffies_rec jf_rec;
+	}dt;
+	#if USE_DEPRECATED
 	struct jiffies_q *jf;
+	#endif
 	if (!is_valid_recorder(rec))
 		return;
-	jf = &rec->jf;
 	#if ADVANCED_EVENT_ENABLE
-	record_advanced_event(sk, -1, id, 0b0, 1, jf->t); // jiffies: type=-1, loc=id, fmt=0, data=jf->t
+	record_advanced_event(sk, -1, id, 0b0, 1, rec->jif.n); // jiffies: type=-1, loc=id, fmt=0, data=jif.n
 	#endif
+
+	if (rec->jif.n == 0){
+		// push new data
+		dt.jf_rec.init_jiffies = v;
+		push_u64(rec, &rec->jif.mb, DETER_MEM_BLOCK_TYPE_JIF, dt.u);
+		rec->jif.n++;
+		// update state
+		rec->jif.last_jiffies = v;
+		rec->jif.idx_delta = 0;
+	}else if (v != rec->jif.last_jiffies){
+		// push new data
+		dt.jf_rec.jiffies_delta = v - rec->jif.last_jiffies;
+		dt.jf_rec.idx_delta = rec->jif.idx_delta + 1;
+		push_u64(rec, &rec->jif.mb, DETER_MEM_BLOCK_TYPE_JIF, dt.u);
+		rec->jif.n++;
+		// update state
+		rec->jif.last_jiffies = v;
+		rec->jif.idx_delta = 0;
+	}else{
+		rec->jif.idx_delta++;
+	}
+
+	#if USE_DEPRECATED
+	jf = &rec->jf;
 	if (jf->t == 0){ // this is the first jiffies read
 		jf->v[0].init_jiffies = v;
 		jf->last_jiffies = v;
@@ -726,6 +1066,7 @@ static void _read_jiffies(const struct sock *sk, unsigned long v, int id){
 		jf->t++;
 	}else
 		jf->idx_delta++;
+	#endif /* USE_DEPRECATED */
 }
 static void read_jiffies(const struct sock *sk, unsigned long v, int id){
 	_read_jiffies(sk, v, id + 100);
@@ -734,6 +1075,7 @@ static void read_tcp_time_stamp(const struct sock *sk, unsigned long v, int id){
 	_read_jiffies(sk, v, id);
 }
 
+#if USE_DEPRECATED
 static inline void push_memory_pressure_q(struct memory_pressure_q *q, bool v){
 	u32 idx = get_memory_pressure_q_idx(q->t);
 	u32 bit_idx = idx & 31, arr_idx = idx / 32;
@@ -744,25 +1086,66 @@ static inline void push_memory_pressure_q(struct memory_pressure_q *q, bool v){
 	wmb();
 	q->t++;
 }
+#endif /* USE_DEPRECATED */
 static void record_tcp_under_memory_pressure(const struct sock *sk, bool ret){
+	struct DeterRecorder* rec = (struct DeterRecorder*)sk->recorder;
 	#if ADVANCED_EVENT_ENABLE
 	record_advanced_event(sk, -2, 0, 0b0, 1, (int)ret); // mpq: type=-2, loc=0, fmt=0, data=ret
 	#endif
-	push_memory_pressure_q(&((struct derand_recorder*)(sk->recorder))->mpq, ret);
+	push_bit(rec, &rec->mp.mb, DETER_MEM_BLOCK_TYPE_MP, (u8)ret);
+	rec->mp.n++;
+	#if USE_DEPRECATED
+	push_memory_pressure_q(&((struct DeterRecorder*)(sk->recorder))->mpq, ret);
+	#endif /* USE_DEPRECATED */
 }
 
 static void record_sk_under_memory_pressure(const struct sock *sk, bool ret){
+	struct DeterRecorder* rec = (struct DeterRecorder*)sk->recorder;
 	#if ADVANCED_EVENT_ENABLE
 	record_advanced_event(sk, -2, 0, 0b0, 1, (int)ret); // mpq: type=-2, loc=0, fmt=0, data=ret
 	#endif
-	push_memory_pressure_q(&((struct derand_recorder*)(sk->recorder))->mpq, ret);
+	push_bit(rec, &rec->mp.mb, DETER_MEM_BLOCK_TYPE_MP, (u8)ret);
+	rec->mp.n++;
+	#if USE_DEPRECATED
+	push_memory_pressure_q(&((struct DeterRecorder*)(sk->recorder))->mpq, ret);
+	#endif /* USE_DEPRECATED */
 }
 
 static void record_sk_memory_allocated(const struct sock *sk, long ret){
-	struct memory_allocated_q *maq = &((struct derand_recorder*)sk->recorder)->maq;
-	#if ADVANCED_EVENT_ENABLE
-	record_advanced_event(sk, -3, 0, 0b0, 1, maq->t); // maq: type=-3, loc=0, fmt=0b0, data=maq->t
+	struct DeterRecorder* rec = (struct DeterRecorder*)sk->recorder;
+	union{
+		u64 u;
+		union memory_allocated_rec ma_rec;
+	}dt;
+	#if USE_DEPRECATED
+	struct memory_allocated_q *maq = &((struct DeterRecorder*)sk->recorder)->maq;
 	#endif
+	#if ADVANCED_EVENT_ENABLE
+	record_advanced_event(sk, -3, 0, 0b0, 1, rec->ma.n); // maq: type=-3, loc=0, fmt=0b1, data=ma.n
+	#endif
+
+	if (rec->ma.n == 0){
+		// push new data
+		dt.ma_rec.init_v = ret;
+		push_u64(rec, &rec->ma.mb, DETER_MEM_BLOCK_TYPE_MA, dt.u);
+		rec->ma.n++;
+		// update state
+		rec->ma.last_v = ret;
+		rec->ma.idx_delta = 0;
+	}else if (ret != rec->ma.last_v){
+		// push new data
+		dt.ma_rec.v_delta = (s32)(ret - rec->ma.last_v);
+		dt.ma_rec.idx_delta = rec->ma.idx_delta + 1;
+		push_u64(rec, &rec->ma.mb, DETER_MEM_BLOCK_TYPE_MA, dt.u);
+		rec->ma.n++;
+		// update state
+		rec->ma.last_v = ret;
+		rec->ma.idx_delta = 0;
+	}else{
+		rec->ma.idx_delta++;
+	}
+
+	#if USE_DEPRECATED
 	if (maq->t == 0){ // this is the first read to memory_allocated
 		maq->v[0].init_v = ret;
 		maq->last_v = ret;
@@ -779,10 +1162,11 @@ static void record_sk_memory_allocated(const struct sock *sk, long ret){
 		maq->t++;
 	}else 
 		maq->idx_delta++;
+	#endif /* USE_DEPRECATED */
 }
 
 static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){
-	struct derand_recorder *rec = sk->recorder;
+	struct DeterRecorder *rec = sk->recorder;
 	#if ADVANCED_EVENT_ENABLE
 	record_advanced_event(sk, -4, 0, 0b0, 1, 0); // type=-4, loc=0, fmt=0b00, data=0
 	#endif
@@ -790,15 +1174,23 @@ static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){
 }
 
 static void record_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int loc){
-	struct mstamp_q *msq = &((struct derand_recorder*)sk->recorder)->msq;
-	#if ADVANCED_EVENT_ENABLE
-	record_advanced_event(sk, -5, 0, 0b0, 1, msq->t); // msq: type=-5, loc=0, fmt=0b0, data=msq->t
+	struct DeterRecorder* rec = (struct DeterRecorder*)sk->recorder;
+	#if USE_DEPRECATED
+	struct mstamp_q *msq = &((struct DeterRecorder*)sk->recorder)->msq;
 	#endif
+	#if ADVANCED_EVENT_ENABLE
+	record_advanced_event(sk, -5, 0, 0b0, 1, rec->ms.n); // msq: type=-5, loc=0, fmt=0b0, data=ms.n
+	#endif
+	push_u64(rec, &rec->ms.mb, DETER_MEM_BLOCK_TYPE_MS, cl->v64);
+	rec->ms.n++;
+	#if USE_DEPRECATED
 	msq->v[get_mstamp_q_idx(msq->t)] = *cl;
 	wmb();
 	msq->t++;
+	#endif /* USE_DEPRECATED */
 }
 
+#if USE_DEPRECATED
 static inline void push_effect_bool_q(struct effect_bool_q *q, bool v){
 	u32 idx = get_effect_bool_q_idx(q->t);
 	u32 bit_idx = idx & 31, arr_idx = idx / 32;
@@ -809,36 +1201,58 @@ static inline void push_effect_bool_q(struct effect_bool_q *q, bool v){
 	wmb();
 	q->t++;
 }
+#endif /* USE_DEPRECATED */
+
 static void record_effect_bool(const struct sock *sk, int loc, bool v){
+	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
 	#if ADVANCED_EVENT_ENABLE
 	if (loc != 0) // loc 0 is not serializable among all events, but just within incoming packets
-		record_advanced_event(sk, -6, loc, 0b0, 1, ((struct derand_recorder*)sk->recorder)->ebq[loc].t); // ebq: type=-6, loc=loc, fmt=0b0, data=ebq[loc].t
+		record_advanced_event(sk, -6, loc, 0b0, 1, rec->eb[loc].n); // ebq: type=-6, loc=loc, fmt=0b0, data=eb[loc].n
 	#endif
-	push_effect_bool_q(&((struct derand_recorder*)sk->recorder)->ebq[loc], v);
+	push_bit(rec, &rec->eb[loc].mb, DETER_MEM_BLOCK_TYPE_EB(loc), (u8)v);
+	rec->eb[loc].n++;
+	#if USE_DEPRECATED
+	push_effect_bool_q(&((struct DeterRecorder*)sk->recorder)->ebq[loc], v);
+	#endif /* USE_DEPRECATED */
 }
 
 static void record_skb_still_in_host_queue(const struct sock *sk, bool ret){
-	struct SkbInQueueQ *siqq = &((struct derand_recorder*)sk->recorder)->siqq;
-	#if ADVANCED_EVENT_ENABLE
-	record_advanced_event(sk, -7, 0, 0b0, 1, siqq->t); // siqq: type=-7, loc=0, fmt=0b0, data=siqq->t
+	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
+	#if USE_DEPRECATED
+	struct SkbInQueueQ *siqq = &((struct DeterRecorder*)sk->recorder)->siqq;
 	#endif
+	#if ADVANCED_EVENT_ENABLE
+	record_advanced_event(sk, -7, 0, 0b0, 1, rec->siq.n); // siqq: type=-7, loc=0, fmt=0b0, data=siqq->t
+	#endif
+	push_bit(rec, &rec->siq.mb, DETER_MEM_BLOCK_TYPE_SIQ, (u8)ret);
+	rec->siq.n++;
+	#if USE_DEPRECATED
 	siqq->v[get_siq_q_idx(siqq->t)] = ret;
 	wmb();
 	siqq->t++;
+	#endif
 }
 
 #if COLLECT_TX_STAMP
 static void tx_stamp(const struct sk_buff *skb){
 	struct sock* sk = skb->sk;
+	struct DeterRecorder* rec;
+	u64 clock;
+
 	if (!sk)
 		return;
-	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
+	rec = (struct DeterRecorder*)sk->recorder;
 	if (!rec || !is_valid_recorder(rec))
 		return;
-	u64 clock = local_clock();
+	clock = local_clock();
+
+	push_u32(rec, &rec->ts.mb, DETER_MEM_BLOCK_TYPE_TS, clock);
+	rec->ts.n++;
+	#if USE_DEPRECATED
 	rec->tsq.v[get_tsq_idx(rec->tsq.t)] = clock;
 	wmb();
 	rec->tsq.t++;
+	#endif
 }
 #endif
 
@@ -846,7 +1260,7 @@ static void tx_stamp(const struct sk_buff *skb){
  * alert
  *****************************/
 static void record_alert(const struct sock *sk, int loc){
-	struct derand_recorder *rec = (struct derand_recorder*)sk->recorder;
+	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
 	if (rec)
 		rec->alert |= 1 << loc;
 }

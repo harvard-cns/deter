@@ -3,6 +3,6 @@
 
 #include "kernel_typedef.hpp"
 
-#include "../shared_data_struct/derand_recorder.h"
+#include "../shared_data_struct/deter_recorder.h"
 
 #endif /* _USER__DERAND_RECORDER_HPP */

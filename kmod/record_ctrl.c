@@ -1,75 +1,60 @@
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include "record_ctrl.h"
-#include "derand_recorder.h"
 #include "mem_util.h"
+#include "record_shmem.h"
 
-struct record_ctrl record_ctrl = {
-	.addr = NULL,
-	.max_sock = 0,
-	.stack = NULL,
-	.top = 0,
-	.lock = __SPIN_LOCK_UNLOCKED()
-};
-
-int create_record_ctrl(int max_sock){
+int create_record_ctrl(void){
 	int i;
 
 	// find the right number of pages 
-	int order = get_page_order(max_sock * sizeof(struct derand_recorder));
-	printk("[DERAND] need %lu Bytes, allocat %lu Bytes\n", (max_sock * sizeof(struct derand_recorder)), (1<<order) * 4096lu);
+	int order = get_page_order(sizeof(struct SharedMemLayout));
+	printk("[DERAND] need %lu Bytes, allocat %lu Bytes\n", (sizeof(struct SharedMemLayout)), (1<<order) * 4096lu);
 
 	// allocate and reserve pages
-	record_ctrl.addr = (struct derand_recorder*)__get_free_pages(GFP_KERNEL, order);
-	if (record_ctrl.addr){
-		reserve_pages(virt_to_page(record_ctrl.addr), 1<<order);
-		// mark not in use for all recorders
-		for (i = 0; i < max_sock; i++)
-			record_ctrl.addr[i].recorder_id = -1;
+	shmem.addr = (struct SharedMemLayout*)__get_free_pages(GFP_KERNEL, order);
+	if (shmem.addr){
+		reserve_pages(virt_to_page(shmem.addr), 1<<order);
 	}else 
 		goto fail_addr;
 
-	// allocate memory for stack
-	record_ctrl.stack = kmalloc(sizeof(int) * max_sock, GFP_KERNEL);
-	if (!record_ctrl.stack)
-		goto fail_stack;
+	// init free_rec_ring, contain all recorder
+	struct RecorderRing *rec_ring = &shmem.addr->free_rec_ring;
+	rec_ring->h = 0;
+	rec_ring->t = N_RECORDER;
+	for (i = 0; i < N_RECORDER; i++)
+		rec_ring->v[i] = i;
 
-	// init stack of free memory for sockets
-	for (i = 0; i < max_sock; i++)
-		record_ctrl.stack[i] = max_sock - i - 1;
-	record_ctrl.top = max_sock;
+	// init free_mb_ring, contain all MemBlock
+	struct FreeMemBlockRing *free_mb_ring = &shmem.addr->free_mb_ring;
+	free_mb_ring->h = 0;
+	free_mb_ring->t = N_MEM_BLOCK;
+	for (i = 0; i < N_MEM_BLOCK; i++)
+		free_mb_ring->v[i] = i;
 
-	// set max_sock
-	record_ctrl.max_sock = max_sock;
+	// init done_mb_ring, empty
+	struct DoneMemBlockRing *done_mb_ring = &shmem.addr->done_mb_ring;
+	done_mb_ring->h = 0;
+	done_mb_ring->t = 0;
+	done_mb_ring->t_mp = 0;
 
 	return 0;
 
-fail_stack:
-	unreserve_pages(virt_to_page(record_ctrl.addr), 1<<order);
-	free_pages((unsigned long)record_ctrl.addr, order);    
-	record_ctrl.addr = NULL;
-	printk("[DERAND] create_record_ctrl(): Fail to allocate record_ctrl.stack\n");
 fail_addr:
-	printk("[DERAND] create_record_ctrl(): Fail to allocate record_ctrl.addr\n");
+	printk("[DERAND] create_record_ctrl(): Fail to allocate shmem.addr\n");
 	return -1;
 }
 
 void delete_record_ctrl(void){
 	int order;
-	if (!record_ctrl.addr)
+	if (!shmem.addr)
 		return;
 
 	// find the right number of pages 
-	order = get_page_order(record_ctrl.max_sock * sizeof(struct derand_recorder));
+	order = get_page_order(sizeof(struct SharedMemLayout));
 
 	// free pages
-	unreserve_pages(virt_to_page(record_ctrl.addr), 1<<order);
-	free_pages((unsigned long)record_ctrl.addr, order);    
-	record_ctrl.addr = NULL;
-	// free stack
-	kfree(record_ctrl.stack);
-	// clear stack top
-	record_ctrl.top = 0;
-	// clear max_sock
-	record_ctrl.max_sock = 0;
+	unreserve_pages(virt_to_page(shmem.addr), 1<<order);
+	free_pages((unsigned long)shmem.addr, order);    
+	shmem.addr = NULL;
 }

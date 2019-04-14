@@ -2,13 +2,13 @@
 #define _KMOD__COPY_FROM_SOCK_INIT_VAL_H
 
 #include <linux/tcp.h>
-#include "derand_recorder.h"
+#include "deter_recorder.h"
 
 static inline void copy_from_server_sock(struct sock *sk){
 	struct inet_sock *isk = inet_sk(sk);
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
-	struct tcp_sock_init_data *d = &((struct derand_recorder*)sk->recorder)->init_data;
+	struct tcp_sock_init_data *d = &((struct DeterRecorder*)sk->recorder)->init_data;
 	d->tcp_header_len = tp->tcp_header_len;
 	d->pred_flags = tp->pred_flags;
 	d->segs_in = tp->segs_in;

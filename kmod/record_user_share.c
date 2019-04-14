@@ -1,19 +1,19 @@
 #include "record_user_share.h"
-#include "record_ctrl.h"
+#include "record_shmem.h"
 #include "proc_expose.h"
 
-// struct name: proc_derand_expose
-INIT_PROC_EXPOSE(derand)
+// struct name: proc_deter_expose
+INIT_PROC_EXPOSE(deter)
 
 // function for output_func
 static int expose_addr(void *args, char* buf, size_t len){
-	return sprintf(buf, "0x%llx\n", virt_to_phys(record_ctrl.addr));
+	return sprintf(buf, "0x%llx\n", virt_to_phys(shmem.addr));
 }
 
 int share_mem_to_user(void){
 	int ret;
-	proc_derand_expose.output_func = expose_addr;
-	ret = proc_expose_start(&proc_derand_expose);
+	proc_deter_expose.output_func = expose_addr;
+	ret = proc_expose_start(&proc_deter_expose);
 	if (ret){
 		printk("[DERAND] share_mem_to_user: Fail to open proc file\n");
 		return -1;
@@ -22,5 +22,5 @@ int share_mem_to_user(void){
 }
 
 void stop_share_mem_to_user(void){
-	proc_expose_stop(&proc_derand_expose);
+	proc_expose_stop(&proc_deter_expose);
 }

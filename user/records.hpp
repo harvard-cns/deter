@@ -295,6 +295,7 @@ class Records{
 public:
 	uint32_t mode, broken, alert;
 	uint32_t recorder_id;
+	uint32_t active;
 	uint32_t sip, dip;
 	uint16_t sport, dport;
 	uint32_t fin_seq;
@@ -311,6 +312,7 @@ public:
 	uint32_t n_sockets_allocated;
 	std::vector<skb_mstamp> mstamp;
 	std::vector<uint8_t> siqq;
+	BitArray siq;
 	BitArray ebq[DERAND_EFFECT_BOOL_N_LOC];
 	#if COLLECT_TX_STAMP
 	std::vector<uint32_t> tsq;
@@ -325,7 +327,7 @@ public:
 	std::vector<u32> rpq;
 	#endif
 
-	Records() : broken(0), alert(0), recorder_id(-1), fin_seq(0) {}
+	Records() : broken(0), alert(0), recorder_id(-1), active(0), fin_seq(0) {}
 	void transform(); // transform raw data to final format
 	void order_sockcalls(); // order sockcalls according to their first appearance in evts
 	int dump(const char* filename = NULL);

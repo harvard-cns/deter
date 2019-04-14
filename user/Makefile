@@ -1,12 +1,12 @@
 all: recorder reader replay logger
 
-recorder : recorder.cpp mem_share.o records.o derand_recorder.hpp ../shared_data_struct/derand_recorder.h
+recorder : recorder.cpp mem_share.o records.o deter_recorder.hpp ../shared_data_struct/deter_recorder.h ../shared_data_struct/mem_block.h
 	g++ recorder.cpp mem_share.o records.o -o recorder -O3 -std=gnu++11 -lpthread
 
 mem_share.o : mem_share.cpp mem_share.hpp
 	g++ mem_share.cpp -c -o mem_share.o -O3 -std=gnu++11
 
-records.o: records.cpp records.hpp derand_recorder.hpp ../shared_data_struct/base_struct.h
+records.o: records.cpp records.hpp deter_recorder.hpp ../shared_data_struct/base_struct.h
 	g++ records.cpp -c -o records.o -O3 -std=gnu++11
 
 reader: reader.cpp records.o
@@ -23,6 +23,9 @@ logger: logger.cpp mem_share.o
 
 flow_extractor: flow_extractor.cpp records.o
 	g++ flow_extractor.cpp records.o -o flow_extractor -O3 -std=gnu++11 -lpthread
+
+shmem_reader: shmem_reader.cpp mem_share.o deter_recorder.hpp ../shared_data_struct/deter_recorder.h ../shared_data_struct/mem_block.h
+	g++ shmem_reader.cpp mem_share.o -o shmem_reader -O -std=gnu++11 -lpthread
 
 clean_records:
 	sudo rm *:*'->'*:*
