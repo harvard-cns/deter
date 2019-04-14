@@ -159,7 +159,7 @@ static inline bool init_recorder_mb(struct DeterRecorder* rec){
 		rec->eb[i].mb = mbs[9+i]; mbs[9+i]->type = DETER_MEM_BLOCK_TYPE_EB(i);
 	}
 	#if ADVANCED_EVENT_ENABLE
-	rec->ae.mb = mbs[9 + DETER_EFFECT_BOOL_N_LOC + 1];
+	rec->ae.mb = mbs[9 + DETER_EFFECT_BOOL_N_LOC]; mbs[9 + DETER_EFFECT_BOOL_N_LOC]->type = DETER_MEM_BLOCK_TYPE_AE;
 	#endif
 	return true;
 }
