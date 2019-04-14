@@ -56,4 +56,4 @@ cd ../kmod
 sudo insmod derand_recorder.ko dstip=$dstip_int ndstip=$ndstip_int
 
 cd ../user
-sudo ./recorder $n_cpu
+sudo ./recorder
