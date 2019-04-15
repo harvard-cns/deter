@@ -78,6 +78,11 @@ static int dequeue(struct PacketQueue *q){
 		return -1;
 	rmb();
 	p = &q->q[get_pkt_q_idx(q->h)];
+	{
+		struct iphdr *iph = ip_hdr(p->skb);
+		u16 ipid = ntohs(iph->id);
+		derand_log("dequeue pkt ipid=%hu\n", ipid);
+	}
 
 	// because we are replaying bh events, we want to disable bh & preempt
 	preempt_disable();
