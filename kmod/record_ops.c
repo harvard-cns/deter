@@ -225,40 +225,6 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	rec->jif.last_jiffies = rec->jif.idx_delta = 0;
 	rec->ma.last_v = rec->ma.idx_delta = 0;
 
-	#if USE_DEPRECATED
-	rec->evt_h = rec->evt_t = 0;
-	rec->sc_h = rec->sc_t = 0;
-	rec->dpq.h = rec->dpq.t = 0;
-	// reorder
-	#if GET_REORDER
-	memset(&rec->reorder, 0, sizeof(rec->reorder));
-	#endif
-	#if GET_RX_PKT_IDX
-	rec->rpq.h = rec->rpq.t = 0;
-	#endif
-	rec->jf.h = rec->jf.t = rec->jf.idx_delta = rec->jf.last_jiffies = 0;
-	rec->mpq.h = rec->mpq.t = 0;
-	rec->maq.h = rec->maq.t = rec->maq.idx_delta = rec->maq.last_v = 0;
-	rec->n_sockets_allocated = 0;
-	rec->msq.h = rec->msq.t = 0;
-	for (i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
-		rec->ebq[i].h = rec->ebq[i].t = 0;
-	rec->siqq.h = rec->siqq.t = 0;
-	#if ADVANCED_EVENT_ENABLE
-	rec->aeq.h = rec->aeq.t = 0;
-	#endif
-	#if COLLECT_TX_STAMP
-	rec->tsq.h = rec->tsq.t = 0;
-	#endif
-	#if COLLECT_RX_STAMP
-	rec->rsq.h = rec->rsq.t = 0;
-	#endif
-	#if GET_BOTTLENECK
-	rec->app_net = rec->app_recv = rec->app_other = 0;
-	rec->net = rec->recv = rec->other = 0;
-	rec->last_bottleneck_update_time = ktime_get().tv64;
-	#endif
-	#endif /* USE_DEPRECATED */
 	if (mode == 0)
 		copy_from_server_sock(sk); // copy sock init data
 	else 
@@ -316,9 +282,6 @@ static inline void record_bottleneck(struct sock *sk, struct DeterRecorder *rec)
 static inline void new_event(struct sock *sk, u32 type){
 	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
 	u32 seq;
-	#if USE_DEPRECATED
-	u32 idx;
-	#endif
 	union{
 		u64 u;
 		struct derand_event e;
@@ -333,29 +296,6 @@ static inline void new_event(struct sock *sk, u32 type){
 	dt.e.type = type;
 	push_u64(rec, &rec->evt.mb, DETER_MEM_BLOCK_TYPE_EVT, dt.u);
 	rec->evt.n++;
-
-	#if USE_DEPRECATED
-	// enqueue the new event
-	idx = get_evt_q_idx(rec->evt_t);
-	#if DERAND_DEBUG
-	rec->evts[idx] = (struct derand_event){.seq = seq, .type = type, .dbg_data = tcp_sk(sk)->write_seq};
-	#else
-	rec->evts[idx] = (struct derand_event){.seq = seq, .type = type};
-	#endif
-	#if GET_EVENT_STAMP
-	rec->evts[idx].ts = ktime_get().tv64;
-	#endif
-	#if GET_CWND
-	rec->evts[idx].cwnd = tcp_sk(sk)->snd_cwnd;
-	rec->evts[idx].ssthresh = tcp_sk(sk)->snd_ssthresh;
-	rec->evts[idx].is_cwnd_limited = tcp_sk(sk)->is_cwnd_limited;
-	#endif
-	wmb();
-	rec->evt_t++;
-	#if GET_BOTTLENECK
-	record_bottleneck(sk, rec);
-	#endif
-	#endif /* USE_DEPRECATED */
 }
 
 #if GET_REORDER
@@ -441,29 +381,9 @@ static inline void put_sockcall(struct DeterRecorder *rec, int sc_id, struct der
 	rec->sockcall.n++;
 	atomic_inc(&rec->sockcall_id_mp);
 }
-#if USE_DEPRECATED
-static inline void update_sc_t(struct DeterRecorder *rec, int sc_id){
-	// make sure sockcall data is written, before we inc sc_t
-	wmb();
-	if (rec->sc_t != sc_id){
-		// This means there are other concurrent sockcall getting sc_id, and get a smaller sc_id than this
-		// We should wait for them to inc sc_t, before we inc sc_t. Otherwise the user recorder may record incomplete data for other sockcalls
-		atomic_t *sc_t = (atomic_t*)&rec->sc_t;
-		u32 cnt = 1;
-		for (;atomic_read(sc_t) != sc_id; cnt++){
-			if ((cnt & 0x0fffffff) == 0)
-				printk("long wait for sc_t: %u sc_id %d\n", atomic_read(sc_t), sc_id);
-		}
-	}
-	atomic_inc((atomic_t*)&rec->sc_t);
-}
-#endif /* USE_DEPRECATED */
 static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	struct DeterRecorder* rec = sk->recorder;
 	struct derand_rec_sockcall sc;
-	#if USE_DEPRECATED
-	struct derand_rec_sockcall *rec_sc;
-	#endif
 	int sc_id;
 
 	if (!rec)
@@ -478,33 +398,6 @@ static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	sc.thread_id = (u64)current;
 	put_sockcall(rec, sc_id, &sc);
 
-	#if USE_DEPRECATED
-	// get record for storing this sockcall
-	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)]; // we have to store it at idx sc_id, not sc_t: because 2 sockcall may be concurrent, so sc_t may not = sc_id
-	// store data for this sockcall
-	rec_sc->type = DERAND_SOCKCALL_TYPE_SENDMSG;
-	rec_sc->sendmsg.flags = msg->msg_flags;
-	rec_sc->sendmsg.size = size;
-	rec_sc->thread_id = (u64)current;
-	#if GET_TS_PER_SOCKCALL
-	rec_sc->ts = ktime_get().tv64;
-	#endif
-	#if GET_WRITE_SEQ_PER_SOCKCALL
-	rec_sc->write_seq = tcp_sk(sk)->write_seq;
-	rec_sc->snd_una = tcp_sk(sk)->snd_una;
-	rec_sc->snd_nxt = tcp_sk(sk)->snd_nxt;
-	#endif
-	#if GET_BOTTLENECK
-	rec_sc->app_net = rec->app_net / 1000; // rec_sc->app_net is u32 in microsecond, rec->app_net is u64 in nanosecond. same below
-	rec_sc->app_recv = rec->app_recv / 1000;
-	rec_sc->app_other = rec->app_other / 1000;
-	rec_sc->net = rec->net / 1000;
-	rec_sc->recv = rec->recv / 1000;
-	rec_sc->other = rec->other / 1000;
-	#endif
-	// update sc_t
-	update_sc_t(rec, sc_id);
-	#endif /* USE_DEPRECATED */
 	// return sockcall ID 
 	return sc_id;
 }
@@ -522,9 +415,6 @@ static u32 new_sendpage(struct sock *sk, int offset, size_t size, int flags){
 static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock, int flags, int *addr_len){
 	struct DeterRecorder* rec = sk->recorder;
 	struct derand_rec_sockcall sc;
-	#if USE_DEPRECATED
-	struct derand_rec_sockcall *rec_sc;
-	#endif
 	int sc_id;
 
 	if (!rec)
@@ -540,25 +430,6 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 	sc.thread_id = (u64)current;
 	put_sockcall(rec, sc_id, &sc);
 
-	#if USE_DEPRECATED
-	// get record for storing this sockcall
-	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
-	// store data for this sockcall
-	rec_sc->type = DERAND_SOCKCALL_TYPE_RECVMSG;
-	rec_sc->recvmsg.flags = nonblock | flags;
-	rec_sc->recvmsg.size = len;
-	rec_sc->thread_id = (u64)current;
-	#if GET_TS_PER_SOCKCALL
-	rec_sc->ts = ktime_get().tv64;
-	#endif
-	#if GET_WRITE_SEQ_PER_SOCKCALL
-	rec_sc->write_seq = tcp_sk(sk)->write_seq;
-	rec_sc->snd_una = tcp_sk(sk)->snd_una;
-	rec_sc->snd_nxt = tcp_sk(sk)->snd_nxt;
-	#endif
-	// update sc_t
-	update_sc_t(rec, sc_id);
-	#endif /* USE_DEPRECATED */
 	// return sockcall ID
 	return sc_id;
 }
@@ -566,9 +437,6 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 static u32 new_splice_read(struct sock *sk, size_t len, unsigned int flags){
 	struct DeterRecorder* rec = sk->recorder;
 	struct derand_rec_sockcall sc;
-	#if USE_DEPRECATED
-	struct derand_rec_sockcall *rec_sc;
-	#endif
 	int sc_id;
 
 	if (!rec)
@@ -584,24 +452,6 @@ static u32 new_splice_read(struct sock *sk, size_t len, unsigned int flags){
 	sc.thread_id = (u64)current;
 	put_sockcall(rec, sc_id, &sc);
 
-	#if USE_DEPRECATED
-	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
-	// store data for this sockcall
-	rec_sc->type = DERAND_SOCKCALL_TYPE_SPLICE_READ;
-	rec_sc->splice_read.flags = flags;
-	rec_sc->splice_read.size = len;
-	rec_sc->thread_id = (u64)current;
-	#if GET_TS_PER_SOCKCALL
-	rec_sc->ts = ktime_get().tv64;
-	#endif
-	#if GET_WRITE_SEQ_PER_SOCKCALL
-	rec_sc->write_seq = tcp_sk(sk)->write_seq;
-	rec_sc->snd_una = tcp_sk(sk)->snd_una;
-	rec_sc->snd_nxt = tcp_sk(sk)->snd_nxt;
-	#endif
-	// update sc_t
-	update_sc_t(rec, sc_id);
-	#endif /* USE_DEPRECATED */
 	// return sockcall ID
 	return sc_id;
 }
@@ -609,9 +459,6 @@ static u32 new_splice_read(struct sock *sk, size_t len, unsigned int flags){
 static u32 new_close(struct sock *sk, long timeout){
 	struct DeterRecorder* rec = sk->recorder;
 	struct derand_rec_sockcall sc;
-	#if USE_DEPRECATED
-	struct derand_rec_sockcall *rec_sc;
-	#endif
 	int sc_id;
 
 	if (!rec)
@@ -625,32 +472,6 @@ static u32 new_close(struct sock *sk, long timeout){
 	sc.thread_id = (u64)current;
 	put_sockcall(rec, sc_id, &sc);
 
-	#if USE_DEPRECATED
-	// get record for storing this sockcall
-	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
-	// store data for this sockcall
-	rec_sc->type = DERAND_SOCKCALL_TYPE_CLOSE;
-	rec_sc->close.timeout = timeout;
-	rec_sc->thread_id = (u64)current;
-	#if GET_TS_PER_SOCKCALL
-	rec_sc->ts = ktime_get().tv64;
-	#endif
-	#if GET_WRITE_SEQ_PER_SOCKCALL
-	rec_sc->write_seq = tcp_sk(sk)->write_seq;
-	rec_sc->snd_una = tcp_sk(sk)->snd_una;
-	rec_sc->snd_nxt = tcp_sk(sk)->snd_nxt;
-	#endif
-	#if GET_BOTTLENECK
-	rec_sc->app_net = rec->app_net / 1000; // rec_sc->app_net is u32 in microsecond, rec->app_net is u64 in nanosecond. same below
-	rec_sc->app_recv = rec->app_recv / 1000;
-	rec_sc->app_other = rec->app_other / 1000;
-	rec_sc->net = rec->net / 1000;
-	rec_sc->recv = rec->recv / 1000;
-	rec_sc->other = rec->other / 1000;
-	#endif
-	// update sc_t
-	update_sc_t(rec, sc_id);
-	#endif /* USE_DEPRECATED */
 	// return sockcall ID
 	return sc_id;
 }
@@ -658,9 +479,6 @@ static u32 new_close(struct sock *sk, long timeout){
 static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *optval, unsigned int optlen){
 	struct DeterRecorder* rec = sk->recorder;
 	struct derand_rec_sockcall sc;
-	#if USE_DEPRECATED
-	struct derand_rec_sockcall *rec_sc;
-	#endif
 	int sc_id;
 
 	if (!rec)
@@ -680,31 +498,6 @@ static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *
 	}
 	put_sockcall(rec, sc_id, &sc);
 
-	#if USE_DEPRECATED
-	// get record for storing this sockcall
-	rec_sc = &rec->sockcalls[get_sc_q_idx(sc_id)];
-	// store data for this sockcall
-	rec_sc->type = DERAND_SOCKCALL_TYPE_SETSOCKOPT;
-	if ((u32)level > 255 || (u32)optname > 255 || (u32)optlen > 12){ // use u32 so that negative values are also considered
-		rec_sc->setsockopt.level = rec_sc->setsockopt.optname = rec_sc->setsockopt.optlen = 255;
-		rec->broken |= BROKEN_UNSUPPORTED_SOCKOPT;
-	}else {
-		rec_sc->setsockopt.level = level;
-		rec_sc->setsockopt.optname = optname;
-		rec_sc->setsockopt.optlen = optlen;
-		copy_from_user(rec_sc->setsockopt.optval, optval, optlen);
-	}
-	#if GET_TS_PER_SOCKCALL
-	rec_sc->ts = ktime_get().tv64;
-	#endif
-	#if GET_WRITE_SEQ_PER_SOCKCALL
-	rec_sc->write_seq = tcp_sk(sk)->write_seq;
-	rec_sc->snd_una = tcp_sk(sk)->snd_una;
-	rec_sc->snd_nxt = tcp_sk(sk)->snd_nxt;
-	#endif
-	// update sc_t
-	update_sc_t(rec, sc_id);
-	#endif /* USE_DEPRECATED */
 	// return sockcall ID
 	return sc_id;
 }
@@ -936,14 +729,6 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 		push_u32(rec, &rec->dp.mb, DETER_MEM_BLOCK_TYPE_DP, idx + i);
 		rec->dp.n++;
 	}
-	#if USE_DEPRECATED
-	// record drops
-	for (i = 1; i < gap; i++){
-		rec->dpq.v[get_drop_q_idx(rec->dpq.t)] = idx + i;
-		wmb();
-		rec->dpq.t++;
-	}
-	#endif /* USE_DEPRECATED */
 	update_pkt_idx(&rec->pkt_idx, ipid);
 	#endif
 }
@@ -963,9 +748,6 @@ static inline void record_advanced_event(const struct sock *sk, u8 func_num, u8 
 	u32 i, j;
 	va_list vl;
 	struct DeterRecorder *rec = (struct DeterRecorder*)(sk->recorder);
-	#if USE_DEPRECATED
-	struct AdvancedEventQ* aeq = &((struct DeterRecorder*)(sk->recorder))->aeq;
-	#endif
 
 	// store ae header
 	push_u32(rec, &rec->ae.mb, DETER_MEM_BLOCK_TYPE_AE, get_ae_hdr_u32(func_num, loc, n, fmt));
@@ -986,26 +768,6 @@ static inline void record_advanced_event(const struct sock *sk, u8 func_num, u8 
 		}
 	}
 	va_end(vl);
-
-	#if USE_DEPRECATED
-	// store ae header
-	aeq->v[get_aeq_idx(aeq->t)] = get_ae_hdr_u32(func_num, loc, n, fmt);
-	// store data
-	va_start(vl, n);
-	for (i = 1, j = 1<<(n-1); j; i++, j>>=1){
-		if (fmt & j){
-			u64 a = va_arg(vl, u64);
-			aeq->v[get_aeq_idx(aeq->t + i)] = (u32)(a & 0xffffffff);
-			i++;
-			aeq->v[get_aeq_idx(aeq->t + i)] = (u32)(a >> 32);
-		}else{
-			aeq->v[get_aeq_idx(aeq->t + i)] = va_arg(vl, int);
-		}
-	}
-	va_end(vl);
-	wmb();
-	aeq->t += i;
-	#endif /* USE_DEPRECATED */
 }
 #endif
 
@@ -1018,9 +780,6 @@ static void _read_jiffies(const struct sock *sk, unsigned long v, int id){
 		u64 u;
 		union jiffies_rec jf_rec;
 	}dt;
-	#if USE_DEPRECATED
-	struct jiffies_q *jf;
-	#endif
 	if (!is_valid_recorder(rec))
 		return;
 	#if ADVANCED_EVENT_ENABLE
@@ -1047,26 +806,6 @@ static void _read_jiffies(const struct sock *sk, unsigned long v, int id){
 	}else{
 		rec->jif.idx_delta++;
 	}
-
-	#if USE_DEPRECATED
-	jf = &rec->jf;
-	if (jf->t == 0){ // this is the first jiffies read
-		jf->v[0].init_jiffies = v;
-		jf->last_jiffies = v;
-		jf->idx_delta = 0;
-		wmb();
-		jf->t = 1;
-	}else if (v != jf->last_jiffies) {
-		union jiffies_rec *jf_rec = &jf->v[get_jiffies_q_idx(jf->t)];
-		jf_rec->jiffies_delta = v - jf->last_jiffies;
-		jf_rec->idx_delta = jf->idx_delta + 1;
-		jf->last_jiffies = v;
-		jf->idx_delta = 0;
-		wmb();
-		jf->t++;
-	}else
-		jf->idx_delta++;
-	#endif /* USE_DEPRECATED */
 }
 static void read_jiffies(const struct sock *sk, unsigned long v, int id){
 	_read_jiffies(sk, v, id + 100);
@@ -1075,18 +814,6 @@ static void read_tcp_time_stamp(const struct sock *sk, unsigned long v, int id){
 	_read_jiffies(sk, v, id);
 }
 
-#if USE_DEPRECATED
-static inline void push_memory_pressure_q(struct memory_pressure_q *q, bool v){
-	u32 idx = get_memory_pressure_q_idx(q->t);
-	u32 bit_idx = idx & 31, arr_idx = idx / 32;
-	if (bit_idx == 0)
-		q->v[arr_idx] = (u32)v;
-	else
-		q->v[arr_idx] |= ((u32)v) << bit_idx;
-	wmb();
-	q->t++;
-}
-#endif /* USE_DEPRECATED */
 static void record_tcp_under_memory_pressure(const struct sock *sk, bool ret){
 	struct DeterRecorder* rec = (struct DeterRecorder*)sk->recorder;
 	#if ADVANCED_EVENT_ENABLE
@@ -1094,9 +821,6 @@ static void record_tcp_under_memory_pressure(const struct sock *sk, bool ret){
 	#endif
 	push_bit(rec, &rec->mp.mb, DETER_MEM_BLOCK_TYPE_MP, (u8)ret);
 	rec->mp.n++;
-	#if USE_DEPRECATED
-	push_memory_pressure_q(&((struct DeterRecorder*)(sk->recorder))->mpq, ret);
-	#endif /* USE_DEPRECATED */
 }
 
 static void record_sk_under_memory_pressure(const struct sock *sk, bool ret){
@@ -1106,9 +830,6 @@ static void record_sk_under_memory_pressure(const struct sock *sk, bool ret){
 	#endif
 	push_bit(rec, &rec->mp.mb, DETER_MEM_BLOCK_TYPE_MP, (u8)ret);
 	rec->mp.n++;
-	#if USE_DEPRECATED
-	push_memory_pressure_q(&((struct DeterRecorder*)(sk->recorder))->mpq, ret);
-	#endif /* USE_DEPRECATED */
 }
 
 static void record_sk_memory_allocated(const struct sock *sk, long ret){
@@ -1117,9 +838,6 @@ static void record_sk_memory_allocated(const struct sock *sk, long ret){
 		u64 u;
 		union memory_allocated_rec ma_rec;
 	}dt;
-	#if USE_DEPRECATED
-	struct memory_allocated_q *maq = &((struct DeterRecorder*)sk->recorder)->maq;
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	record_advanced_event(sk, -3, 0, 0b0, 1, rec->ma.n); // maq: type=-3, loc=0, fmt=0b1, data=ma.n
 	#endif
@@ -1144,25 +862,6 @@ static void record_sk_memory_allocated(const struct sock *sk, long ret){
 	}else{
 		rec->ma.idx_delta++;
 	}
-
-	#if USE_DEPRECATED
-	if (maq->t == 0){ // this is the first read to memory_allocated
-		maq->v[0].init_v = ret;
-		maq->last_v = ret;
-		maq->idx_delta = 0;
-		wmb();
-		maq->t = 1;
-	}else if (ret != maq->last_v){
-		union memory_allocated_rec *ma_rec = &maq->v[get_memory_allocated_q_idx(maq->t)];
-		ma_rec->v_delta = (s32)(ret - maq->last_v);
-		ma_rec->idx_delta = maq->idx_delta + 1;
-		maq->last_v = ret;
-		maq->idx_delta = 0;
-		wmb();
-		maq->t++;
-	}else 
-		maq->idx_delta++;
-	#endif /* USE_DEPRECATED */
 }
 
 static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){
@@ -1175,33 +874,12 @@ static void record_sk_sockets_allocated_read_positive(struct sock *sk, int ret){
 
 static void record_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int loc){
 	struct DeterRecorder* rec = (struct DeterRecorder*)sk->recorder;
-	#if USE_DEPRECATED
-	struct mstamp_q *msq = &((struct DeterRecorder*)sk->recorder)->msq;
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	record_advanced_event(sk, -5, 0, 0b0, 1, rec->ms.n); // msq: type=-5, loc=0, fmt=0b0, data=ms.n
 	#endif
 	push_u64(rec, &rec->ms.mb, DETER_MEM_BLOCK_TYPE_MS, cl->v64);
 	rec->ms.n++;
-	#if USE_DEPRECATED
-	msq->v[get_mstamp_q_idx(msq->t)] = *cl;
-	wmb();
-	msq->t++;
-	#endif /* USE_DEPRECATED */
 }
-
-#if USE_DEPRECATED
-static inline void push_effect_bool_q(struct effect_bool_q *q, bool v){
-	u32 idx = get_effect_bool_q_idx(q->t);
-	u32 bit_idx = idx & 31, arr_idx = idx / 32;
-	if (bit_idx == 0)
-		q->v[arr_idx] = (u32)v;
-	else
-		q->v[arr_idx] |= ((u32)v) << bit_idx;
-	wmb();
-	q->t++;
-}
-#endif /* USE_DEPRECATED */
 
 static void record_effect_bool(const struct sock *sk, int loc, bool v){
 	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
@@ -1211,26 +889,15 @@ static void record_effect_bool(const struct sock *sk, int loc, bool v){
 	#endif
 	push_bit(rec, &rec->eb[loc].mb, DETER_MEM_BLOCK_TYPE_EB(loc), (u8)v);
 	rec->eb[loc].n++;
-	#if USE_DEPRECATED
-	push_effect_bool_q(&((struct DeterRecorder*)sk->recorder)->ebq[loc], v);
-	#endif /* USE_DEPRECATED */
 }
 
 static void record_skb_still_in_host_queue(const struct sock *sk, bool ret){
 	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
-	#if USE_DEPRECATED
-	struct SkbInQueueQ *siqq = &((struct DeterRecorder*)sk->recorder)->siqq;
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	record_advanced_event(sk, -7, 0, 0b0, 1, rec->siq.n); // siqq: type=-7, loc=0, fmt=0b0, data=siqq->t
 	#endif
 	push_bit(rec, &rec->siq.mb, DETER_MEM_BLOCK_TYPE_SIQ, (u8)ret);
 	rec->siq.n++;
-	#if USE_DEPRECATED
-	siqq->v[get_siq_q_idx(siqq->t)] = ret;
-	wmb();
-	siqq->t++;
-	#endif
 }
 
 #if COLLECT_TX_STAMP
@@ -1248,11 +915,6 @@ static void tx_stamp(const struct sk_buff *skb){
 
 	push_u32(rec, &rec->ts.mb, DETER_MEM_BLOCK_TYPE_TS, clock);
 	rec->ts.n++;
-	#if USE_DEPRECATED
-	rec->tsq.v[get_tsq_idx(rec->tsq.t)] = clock;
-	wmb();
-	rec->tsq.t++;
-	#endif
 }
 #endif
 

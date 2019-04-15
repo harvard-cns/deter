@@ -3,8 +3,6 @@
 
 #include "tcp_sock_init_data.h"
 
-#define USE_DEPRECATED 0
-
 #define DERAND_DEBUG 0
 #define ADVANCED_EVENT_ENABLE 0
 #define COLLECT_TX_STAMP 1
