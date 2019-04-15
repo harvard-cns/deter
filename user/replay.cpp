@@ -34,7 +34,7 @@ static int write_proc(const string &proc_file_name, char *buf, uint32_t len){
 
 static int send_buffer_size(const string &proc_file_name){
 	char buf[32];
-	sprintf(buf, "%lu", sizeof(derand_replayer));
+	sprintf(buf, "%lu", sizeof(DeterReplayer));
 	if (write_proc(proc_file_name, buf, strlen(buf))){
 		fprintf(stderr, "Fail to send buffer_size\n");
 		return -1;
@@ -65,7 +65,7 @@ int main(int argc, char **argv){
 	// setup shared memory
 	send_buffer_size("derand_replay");
 	KernelMem kmem;
-	if (kmem.map_proc_exposed_mem("derand_replay", sizeof(derand_replayer)))
+	if (kmem.map_proc_exposed_mem("derand_replay", sizeof(DeterReplayer)))
 		return -1;
 
 	// make replayer

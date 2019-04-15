@@ -1,6 +1,6 @@
 #include "replay_ctrl.h"
 #include "mem_util.h"
-#include "derand_replayer.h"
+#include "deter_replayer.h"
 #include "replay_ops.h"
 #include "logger.h"
 

@@ -26,6 +26,21 @@ int Replayer::convert_event(){
 	return 0;
 }
 
+#if USE_PKT_STREAM
+int Replayer::convert_ps(){
+	auto &s = rec.ps;
+	u64 size = s.size();
+	if (size > PS_Q_LEN){
+		fprintf(stderr, "too many ps: %lu > %u\n", size, PS_Q_LEN);
+		return -1;
+	}
+	d->ps.h = 0;
+	d->ps.t = size;
+	if (size > 0)
+		memcpy(d->ps.v, &s[0], sizeof(uint32_t) * size);
+	return 0;
+}
+#else
 int Replayer::convert_drop(){
 	auto &s = rec.dpq;
 	u64 size = s.size();
@@ -39,6 +54,8 @@ int Replayer::convert_drop(){
 		memcpy(d->dpq.v, &s[0], sizeof(uint32_t) * size);
 	return 0;
 }
+#endif
+
 int Replayer::convert_jiffies(){
 	auto &s = rec.jiffies;
 	u64 size = s.size();
@@ -94,8 +111,7 @@ int Replayer::convert_mstamp(){
 	return 0;
 }
 
-int Replayer::convert_siqq(){
-	#if NEW_SIQ
+int Replayer::convert_siq(){
 	auto &s = rec.siq;
 	if (s.n > SKB_IN_QUEUE_Q_LEN){
 		fprintf(stderr, "to many siqq: %u > %u\n", s.n, SKB_IN_QUEUE_Q_LEN);
@@ -106,18 +122,6 @@ int Replayer::convert_siqq(){
 	if (s.v.size() > 0)
 		memcpy(d->siqq.v, &s.v[0], sizeof(uint32_t) * s.v.size());
 	return 0;
-	#else
-	auto &s = rec.siqq;
-	if (s.size() > SKB_IN_QUEUE_Q_LEN){
-		fprintf(stderr, "too many siqq: %lu > %u\n", s.size(), SKB_IN_QUEUE_Q_LEN);
-		return -1;
-	}
-	d->siqq.h = 0;
-	d->siqq.t = s.size();
-	if (s.size() > 0)
-		memcpy(d->siqq.v, &s[0], sizeof(uint8_t) * s.size());
-	return 0;
-	#endif
 }
 
 int Replayer::convert_effect_bool(){
@@ -171,8 +175,13 @@ int Replayer::read_records(const string &record_file_name){
 	
 	if (convert_event())
 		return -2;
+	#if USE_PKT_STREAM
+	if (convert_ps())
+		return -3;
+	#else
 	if (convert_drop())
 		return -3;
+	#endif
 	if (convert_jiffies())
 		return -4;
 	if (convert_memory_pressure())
@@ -181,7 +190,7 @@ int Replayer::read_records(const string &record_file_name){
 		return -6;
 	if (convert_mstamp())
 		return -7;
-	if (convert_siqq())
+	if (convert_siq())
 		return -8;
 	if (convert_effect_bool())
 		return -9;
@@ -277,7 +286,7 @@ void Replayer::sockcall_thread(u64 id){
 }
 
 volatile int finished = 0;
-void monitor_thread(derand_replayer *d){
+void monitor_thread(DeterReplayer *d){
 	while (!finished){
 		printf("%u %u\n", d->seq, d->evtq.v[get_event_q_idx(d->evtq.h)].seq);
 		sleep(1);

@@ -17,10 +17,18 @@ struct SockcallState{
 	u32 n;
 	struct MemBlock *mb;
 };
+#if USE_PKT_STREAM
+struct PktStreamState{
+	u32 n;
+	u16 last;
+	struct MemBlock *mb;
+};
+#else
 struct DropState{
 	u32 n;
 	struct MemBlock *mb;
 };
+#endif /* USE_PKT_STREAM */
 struct JiffiesState{
 	unsigned long last_jiffies; // the last jiffies value
 	u32 idx_delta;
@@ -73,7 +81,11 @@ struct DeterRecorder{
 
 	struct EventState evt;
 	struct SockcallState sockcall;
+	#if USE_PKT_STREAM
+	struct PktStreamState ps;
+	#else
 	struct DropState dp;
+	#endif
 	struct JiffiesState jif;
 	struct MemoryPressureState mp;
 	struct MemoryAllocatedState ma;
@@ -93,7 +105,11 @@ struct DeterRecorder{
 
 #define DETER_MEM_BLOCK_TYPE_EVT 0
 #define DETER_MEM_BLOCK_TYPE_SOCKCALL 1
+#if USE_PKT_STREAM
+#define DETER_MEM_BLOCK_TYPE_PS 2
+#else
 #define DETER_MEM_BLOCK_TYPE_DP 2
+#endif
 #define DETER_MEM_BLOCK_TYPE_JIF 3
 #define DETER_MEM_BLOCK_TYPE_MP 4
 #define DETER_MEM_BLOCK_TYPE_MA 5

@@ -117,13 +117,13 @@ int Records::dump(const char* filename){
 	if (!dump_vector(sockcalls, fout))
 		goto fail_write;
 
+	#if USE_PKT_STREAM
+	// write ps
+	if (!dump_vector(ps, fout))
+		goto fail_write;
+	#else
 	// write drop
 	if (!dump_vector(dpq, fout))
-		goto fail_write;
-
-	#if GET_REORDER
-	// write reorder
-	if (!dump_vector(reorder, fout))
 		goto fail_write;
 	#endif
 
@@ -214,13 +214,13 @@ int Records::read(const char* filename){
 	if (!read_vector(sockcalls, fin))
 		goto fail_read;
 
+	#if USE_PKT_STREAM
+	// read ps
+	if (!read_vector(ps, fin))
+		goto fail_read;
+	#else
 	// read drop
 	if (!read_vector(dpq, fin))
-		goto fail_read;
-
-	#if GET_REORDER
-	// read reorder
-	if (!read_vector(reorder, fin))
 		goto fail_read;
 	#endif
 
@@ -452,22 +452,24 @@ void Records::print(FILE* fout){
 		fprintf(fout, "\n");
 	}
 
+	#if USE_PKT_STREAM
+	fprintf(fout, "%lu pkt_stream\n", ps.size());
+	for (uint32_t i = 0; i < ps.size(); i++){
+		if (ps[i] >> 15){
+			if (ps[i] == 0xffff){
+				i++;
+				fprintf(fout, "%hd\n", ps[i]);
+			}if ((ps[i] >> 14) & 1)
+				fprintf(fout, "-%hu\n", ps[i] & 0x3fff);
+			else
+				fprintf(fout, "%hu\n", ps[i] & 0x3fff);
+		}else
+			fprintf(fout, "1:%hu\n", ps[i]);
+	}
+	#else
 	fprintf(fout, "%lu drops\n", dpq.size());
 	for (uint32_t i = 0; i < dpq.size(); i++)
 		fprintf(fout, "%u\n", dpq[i]);
-
-	#if GET_REORDER
-	{
-		fprintf(fout, "reorder:\n");
-		for (uint32_t i = 0; i < reorder.size(); ){
-			ReorderPeriod *r = (ReorderPeriod*)&reorder[i];
-			fprintf(fout, "min=%u max=%u:", r->min, r->max);
-			for (uint32_t j = 0; j < r->len; j++)
-				fprintf(fout, " %u", r->order[j] + r->start);
-			fprintf(fout, "\n");
-			i += size_of_ReorderPeriod(r);
-		}
-	}
 	#endif
 
 	fprintf(fout, "%lu new jiffies\n", jiffies.size());
@@ -673,9 +675,10 @@ void Records::clear(){
 	fin_seq = 0;
 	evts.clear();
 	sockcalls.clear();
+	#if USE_PKT_STREAM
+	ps.clear();
+	#else
 	dpq.clear();
-	#if GET_REORDER
-	reorder.clear();
 	#endif
 	jiffies.clear();
 	mpq.clear();
@@ -740,10 +743,6 @@ void Records::print_raw_storage_size(){
 	printf("sockcalls: %lu\n", sizeof(derand_rec_sockcall) * sockcalls.size());
 	//size += sizeof(uint32_t) * dpq.size();
 	//printf("dpq: %lu\n", sizeof(uint32_t) * dpq.size());
-	#if GET_REORDER
-	size += sizeof(uint8_t) * reorder.size();
-	printf("reorder: %lu\n", sizeof(uint8_t) * reorder.size());
-	#endif
 	size += sizeof(jiffies_rec) * jiffies.size();
 	printf("jiffies: %lu\n", sizeof(jiffies_rec) * jiffies.size());
 	size += mpq.raw_storage_size();
@@ -960,10 +959,6 @@ void Records::print_compressed_storage_size(){
 
 	//size += sizeof(uint32_t) * dpq.size();
 	//printf("dpq: %lu\n", sizeof(uint32_t) * dpq.size());
-
-	#if GET_REORDER
-	//TODO: add reorder size
-	#endif
 
 	{
 		this_size = 64 + nbit_dynamic_coding(jiffies.size());

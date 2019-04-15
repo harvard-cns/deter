@@ -2,13 +2,13 @@
 #define _KMOD__COPY_TO_SOCK_INIT_VAL_H
 
 #include <linux/tcp.h>
-#include "derand_replayer.h"
+#include "deter_replayer.h"
 
 static inline void copy_to_sock(struct sock *sk){
 	struct inet_sock *isk = inet_sk(sk);
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
-	struct tcp_sock_init_data *d = &((struct derand_replayer*)sk->replayer)->init_data;
+	struct tcp_sock_init_data *d = &((struct DeterReplayer*)sk->replayer)->init_data;
 	tp->tcp_header_len = d->tcp_header_len;
 	tp->pred_flags = d->pred_flags;
 	tp->segs_in = d->segs_in;

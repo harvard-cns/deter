@@ -148,7 +148,11 @@ static inline bool init_recorder_mb(struct DeterRecorder* rec){
 	// assign mb to recorder
 	rec->evt.mb = mbs[0];		mbs[0]->type = DETER_MEM_BLOCK_TYPE_EVT;
 	rec->sockcall.mb = mbs[1];	mbs[1]->type = DETER_MEM_BLOCK_TYPE_SOCKCALL;
+	#if USE_PKT_STREAM
+	rec->ps.mb = mbs[2];		mbs[2]->type = DETER_MEM_BLOCK_TYPE_PS;
+	#else
 	rec->dp.mb = mbs[2];		mbs[2]->type = DETER_MEM_BLOCK_TYPE_DP;
+	#endif
 	rec->jif.mb = mbs[3];		mbs[3]->type = DETER_MEM_BLOCK_TYPE_JIF;
 	rec->mp.mb = mbs[4];		mbs[4]->type = DETER_MEM_BLOCK_TYPE_MP;
 	rec->ma.mb = mbs[5];		mbs[5]->type = DETER_MEM_BLOCK_TYPE_MA;
@@ -212,9 +216,16 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	while (!init_recorder_mb(rec)); // ensure we get enough valid mb
 
 	// init runtime states
+	#if USE_PKT_STREAM
+	rec->evt.n = rec->sockcall.n = rec->ps.n = rec->jif.n = rec->mp.n = rec->ma.n = rec->ms.n = rec->siq.n = 0;
+	#else
 	rec->evt.n = rec->sockcall.n = rec->dp.n = rec->jif.n = rec->mp.n = rec->ma.n = rec->ms.n = rec->siq.n = 0;
+	#endif
 	for (i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++)
 		rec->eb[i].n = 0;
+	#if USE_PKT_STREAM
+	rec->ps.last = 0;
+	#endif
 	#if COLLECT_TX_STAMP
 	rec->ts.n = 0;
 	#endif
@@ -272,11 +283,6 @@ static inline void new_event(struct sock *sk, u32 type){
 	rec->evt.n++;
 }
 
-#if GET_REORDER
-/* declaration for function that ends reorder buffer */
-static void end_reorder(struct DeterRecorder *rec);
-#endif
-
 /* destruct a DeterRecorder.
  */
 static void recorder_destruct(struct sock *sk){
@@ -286,11 +292,6 @@ static void recorder_destruct(struct sock *sk){
 		//printk("[recorder_destruct] sport = %hu, dport = %hu, recorder is NULL.\n", inet_sk(sk)->inet_sport, inet_sk(sk)->inet_dport);
 		return;
 	}
-
-	#if GET_REORDER
-	// end reorder buf
-	end_reorder(rec);
-	#endif
 
 	// add a finish event
 	new_event(sk, EVENT_TYPE_FINISH);
@@ -319,10 +320,20 @@ static void recorder_destruct(struct sock *sk){
 		rec->ma.n++;
 	}
 
+	// finish ps
+	if (rec->ps.last != 0){
+		push_u16(rec, &rec->ps.mb, DETER_MEM_BLOCK_TYPE_PS, rec->ps.last);
+		rec->ps.n++;
+	}
+
 	// put mb to done_mb_ring
 	put_done_mem_block(rec->evt.mb);
 	put_done_mem_block(rec->sockcall.mb);
+	#if USE_PKT_STREAM
+	put_done_mem_block(rec->ps.mb);
+	#else
 	put_done_mem_block(rec->dp.mb);
+	#endif
 	put_done_mem_block(rec->jif.mb);
 	put_done_mem_block(rec->mp.mb);
 	put_done_mem_block(rec->ma.mb);
@@ -511,97 +522,14 @@ static void tasklet(struct sock *sk){
 /********************************************
  * monitor network action: drop & ecn
  *******************************************/
-#if GET_REORDER
-static inline u32 get_map_idx(u32 idx){
-	return idx & (DERAND_MAX_REORDER - 1);
+/* get the number of consecutive normal pkt */
+static inline u16 ps_get_n_normal(u16 x){
+	return x & 0x7fff;
 }
-static inline void start_new_reorder(struct DeterRecorder *rec){
-    // TODO to optimize: struct align 4 bytes
-    struct ReorderPeriod *r = rec->reorder.period = (struct ReorderPeriod*)(rec->reorder.buf + get_reorder_buf_idx(rec->reorder.buf_idx));
-    rec->reorder.ascending = 1;
-    rec->reorder.min_id = r->start = rec->reorder.max_id = rec->reorder.left = (rec->pkt_idx.idx + 1); // this is the missing one
-    r->len = 0;
+/* test if can add more normal to this record */
+static inline bool ps_normal_not_full(u16 x){
+	return ps_get_n_normal(x) < 0x7fff;
 }
-
-static inline void dump_reorder(struct DeterRecorder *rec){
-    // if all packets in the buffer is ascending, no need to record
-    if (rec->reorder.ascending){
-        rec->reorder.period = NULL;
-        return;
-    }
-    struct ReorderPeriod *r = rec->reorder.period;
-    #if 1
-    // optimization: drop the leading non-reorder
-    u32 skip = 0, min = rec->reorder.min_id - r->start;
-    u32 tail = r->len, max = rec->reorder.max_id - r->start;
-    while (skip < r->len && r->order[skip] == min + skip)
-        skip++;
-    while (tail > skip && r->order[tail-1] == max){
-        tail--;
-        max--;
-    }
-    r->min = min+skip + r->start;
-    r->max = max + r->start;
-    if (skip){
-        r->start += skip;
-        u32 j = 0;
-        for (; j + skip < tail; j++)
-            r->order[j] = r->order[j + skip] - skip;
-        r->len = j;
-    }else if (tail < r->len){
-        r->len = tail;
-    }
-    #endif
-
-	// deal with loop back
-	u32 size = size_of_ReorderPeriod(rec->reorder.period); // the size of current period struct. TODO: align 4-bytes
-	u32 right_end = rec->reorder.buf_idx + size; // the right end mem address of the current period struct
-	if (right_end >= DERAND_REORDER_BUF_SIZE){
-		memcpy(rec->reorder.buf, rec->reorder.buf + DERAND_REORDER_BUF_SIZE, right_end - DERAND_REORDER_BUF_SIZE); // copy the data in the headroom to the beginning of buf
-		right_end -= DERAND_REORDER_BUF_SIZE;
-	}
-    // update buf_idx
-	rec->reorder.buf_idx = right_end;
-	rec->reorder.period = NULL;
-	// update t
-	wmb();
-	rec->reorder.t += size;
-}
-
-static inline void add_to_reorder(struct DeterRecorder *rec, uint32_t idx){
-	struct ReorderPeriod *r = rec->reorder.period;
-	if (r->len > 0)
-		rec->reorder.ascending &= (r->start + r->order[r->len-1] < idx);
-	r->order[r->len++] = idx - r->start;
-	rec->reorder.map[get_map_idx(idx)] = 1;
-	if (idx > rec->reorder.max_id)
-		rec->reorder.max_id = idx;
-}
-
-static inline void pop_till(struct DeterRecorder *rec, uint32_t till){
-    while (rec->reorder.left <= till){
-        if (!rec->reorder.map[get_map_idx(rec->reorder.left)]){ // if not appear, mark as drop
-            rec->dpq.v[get_drop_q_idx(rec->dpq.t)] = rec->reorder.left;
-			wmb();
-			rec->dpq.t++;
-            if (rec->reorder.min_id == rec->reorder.left)
-                rec->reorder.min_id++;
-        }else {
-            rec->reorder.map[get_map_idx(rec->reorder.left)] = 0;
-        }
-        rec->reorder.left++;
-        rec->pkt_idx.last_ipid++;
-        rec->pkt_idx.idx++;
-    }
-}
-static void end_reorder(struct DeterRecorder *rec){
-	if (rec->reorder.period){
-		pop_till(rec, rec->reorder.max_id);
-		dump_reorder(rec);
-	}
-}
-#endif /* GET_REORDER */
-
 void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
 	u16 ipid, gap;
@@ -625,65 +553,53 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	}
 
 	gap = get_pkt_idx_gap(&rec->pkt_idx, ipid);
-	idx = rec->pkt_idx.idx;
-
-	#if GET_REORDER
-	idx = rec->pkt_idx.idx + gap; // the index of this packet. pkt_idx.idx is unchanged until we know it is in order, so it represents the next in-order index
-	// check reorder
-	if (gap > 1 || rec->reorder.period != NULL){
-		// if not in reorder mode
-		if (rec->reorder.period == NULL){
-			start_new_reorder(rec);
+	#if USE_PKT_STREAM
+	if (gap == 1){ // normal
+		u16 x = rec->ps.last;
+		if (ps_normal_not_full(x))
+			rec->ps.last = x+1;
+		else{
+			push_u16(rec, &rec->ps.mb, DETER_MEM_BLOCK_TYPE_PS, rec->ps.last);
+			rec->ps.n++;
+			rec->ps.last = 1;
 		}
-		// if idx is far away from the left, pop left
-		if (rec->reorder.left + DERAND_MAX_REORDER <= idx)
-			pop_till(rec, idx - DERAND_MAX_REORDER);
-		// pop the leading '1's in the map
-		while (rec->reorder.map[get_map_idx(rec->reorder.left)]){
-			rec->reorder.map[get_map_idx(rec->reorder.left)] = 0;
-			rec->reorder.left++;
-			rec->pkt_idx.last_ipid++;
-			rec->pkt_idx.idx++;
+	}else { // abnormal
+		u16 x = rec->ps.last;
+		if (x != 0){ // there is some normal stream, push
+			push_u16(rec, &rec->ps.mb, DETER_MEM_BLOCK_TYPE_PS, x);
+			rec->ps.n++;
+			rec->ps.last = 0;
 		}
-		if (rec->reorder.left > rec->reorder.max_id){
-			// dump pkt_idx.reorder_period
-			dump_reorder(rec);
-			// if idx is still not left, start new reordering period
-			if (idx != rec->reorder.left){
-				start_new_reorder(rec);
-			}else{ // this is a normal packet, continue
-				rec->pkt_idx.last_ipid++;
-				rec->pkt_idx.idx++;
-				return;
+		if (gap <= 0x7fff){ // assume forward gap
+			if (gap < 0x3fff){ // can be stored in one record
+				push_u16(rec, &rec->ps.mb, DETER_MEM_BLOCK_TYPE_PS, gap | 0x8000); // 10[gap]
+				rec->ps.n++;
+			}else{
+				push_u16(rec, &rec->ps.mb, DETER_MEM_BLOCK_TYPE_PS, 0xffff); // if 0xffff, read the next u16, and use it as the gap
+				push_u16(rec, &rec->ps.mb, DETER_MEM_BLOCK_TYPE_PS, gap);
+				rec->ps.n+=2;
+			}
+		}else { // assume backward gap
+			u16 delta = 65536 - (u32)gap; // -gap
+			if (delta < 0x3fff){
+				push_u16(rec, &rec->ps.mb, DETER_MEM_BLOCK_TYPE_PS, delta | 0xc000); // 11[delta]. At most 0xfffe, because delta < 0x3fff
+				rec->ps.n++;
+			}else{
+				push_u16(rec, &rec->ps.mb, DETER_MEM_BLOCK_TYPE_PS, 0xffff); // if 0xffff, read the next u16, and use it as the gap (not delta)
+				push_u16(rec, &rec->ps.mb, DETER_MEM_BLOCK_TYPE_PS, gap);
+				rec->ps.n+=2;
 			}
 		}
-		// add to pkt_idx.reorder_period, and mark map
-		add_to_reorder(rec, idx);
-		// if left hole filled
-		if (rec->reorder.left == idx){
-			// pop left
-			while (rec->reorder.map[get_map_idx(rec->reorder.left)]){
-				rec->reorder.map[get_map_idx(rec->reorder.left)] = 0;
-				rec->reorder.left++;
-				rec->pkt_idx.last_ipid++;
-				rec->pkt_idx.idx++;
-			}
-			if (rec->reorder.left > rec->reorder.max_id){
-				// dump pkt_idx.reorder_period
-				dump_reorder(rec);
-			}
-		}
-	}else if (gap == 1){ // normal
-		rec->pkt_idx.last_ipid++;
-		rec->pkt_idx.idx++;
 	}
 	#else
+	idx = rec->pkt_idx.idx;
+
 	for (i = 1; i < gap; i++){
 		push_u32(rec, &rec->dp.mb, DETER_MEM_BLOCK_TYPE_DP, idx + i);
 		rec->dp.n++;
 	}
-	update_pkt_idx(&rec->pkt_idx, ipid);
 	#endif
+	update_pkt_idx(&rec->pkt_idx, ipid);
 }
 
 void record_fin_seq(struct sock *sk){

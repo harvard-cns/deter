@@ -92,6 +92,7 @@ bool compare_records(Records &a, Records &b){
 			print_sockcall(b.sockcalls[i]);
 			return false;
 		}
+	#if !USE_PKT_STREAM
 	if (a.dpq.size() != b.dpq.size()){
 		printf("dpq size diff: %lu %lu\n", a.dpq.size(), b.dpq.size());
 		return false;
@@ -101,6 +102,7 @@ bool compare_records(Records &a, Records &b){
 			printf("dpq[%u] mismatch: %u %u\n", i, a.dpq[i], b.dpq[i]);
 			return false;
 		}
+	#endif
 	if (a.jiffies.size() != b.jiffies.size()){
 		printf("jiffies size diff: %lu %lu\n", a.jiffies.size(), b.jiffies.size());
 		return false;
@@ -225,10 +227,19 @@ void* recorder_func(void *args){
 		}else if (mb->type == DETER_MEM_BLOCK_TYPE_SOCKCALL){
 			derand_rec_sockcall *data = (derand_rec_sockcall*)mb->data;
 			r.sockcalls.insert(r.sockcalls.end(), data, data + mb->len);
-		}else if (mb->type == DETER_MEM_BLOCK_TYPE_DP){
+		}
+		#if USE_PKT_STREAM
+		else if (mb->type == DETER_MEM_BLOCK_TYPE_PS){
+			uint16_t *data = (uint16_t*)mb->data;
+			r.ps.insert(r.ps.end(), data, data + mb->len);
+		}
+		#else
+		else if (mb->type == DETER_MEM_BLOCK_TYPE_DP){
 			uint32_t *data = (uint32_t*)mb->data;
 			r.dpq.insert(r.dpq.end(), data, data + mb->len);
-		}else if (mb->type == DETER_MEM_BLOCK_TYPE_JIF){
+		}
+		#endif
+		else if (mb->type == DETER_MEM_BLOCK_TYPE_JIF){
 			jiffies_rec *data = (jiffies_rec*)mb->data;
 			r.jiffies.insert(r.jiffies.end(), data, data + mb->len);
 		}else if (mb->type == DETER_MEM_BLOCK_TYPE_MP){
@@ -286,7 +297,11 @@ void* recorder_func(void *args){
 			// print
 			if (r.alert)
 				printf("Alert %x!!! ", r.alert);
+			#if USE_PKT_STREAM
+			printf("%08x:%hu-%08x:%hu\t%lu %lu fin:%u\n", r.sip, r.sport, r.dip, r.dport, r.evts.size(), r.sockcalls.size(), r.fin_seq);
+			#else
 			printf("%08x:%hu-%08x:%hu\t%lu %lu fin:%u #drop %lu\n", r.sip, r.sport, r.dip, r.dport, r.evts.size(), r.sockcalls.size(), r.fin_seq, r.dpq.size());
+			#endif
 
 			// dump r
 			r.dump();

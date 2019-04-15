@@ -2,7 +2,7 @@
 #define _KMOD__REPLAY_OPS_H
 
 #include <linux/spinlock.h>
-#include "derand_replayer.h"
+#include "deter_replayer.h"
 
 enum ReplayState{
 	NOT_STARTED = 0,
@@ -12,7 +12,7 @@ enum ReplayState{
 };
 
 struct replay_ops{
-	struct derand_replayer* replayer;
+	struct DeterReplayer* replayer;
 	volatile enum ReplayState state;
 	uint32_t sip, dip;
 	uint16_t sport, dport;
@@ -24,7 +24,7 @@ struct replay_ops{
 };
 extern struct replay_ops replay_ops;
 
-int replay_ops_start(struct derand_replayer *addr);
+int replay_ops_start(struct DeterReplayer *addr);
 void replay_ops_stop(void);
 
 #endif /* _KMOD__REPLAY_OPS_H */

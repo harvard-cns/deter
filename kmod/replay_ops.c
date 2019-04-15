@@ -24,9 +24,9 @@ struct replay_ops replay_ops = {
 static struct task_struct *replay_task = NULL;
 
 /*******************************************************
- * function for logging derand_replayer stats
+ * function for logging DeterReplayer stats
  ******************************************************/
-void logging_stats(struct derand_replayer *r){
+void logging_stats(struct DeterReplayer *r){
 	int i;
 	derand_log("replay finish, destruct replayer\n");
 	derand_log("sockcall_id: %d\n", atomic_read(&r->sockcall_id));
@@ -196,7 +196,7 @@ static void set_null_timer(struct sock *sk){
  * hooks for replayer create/destruct
  ********************************************/
 static inline void replayer_create(struct sock *sk, struct sk_buff *skb){
-	struct derand_replayer *rep;
+	struct DeterReplayer *rep;
 
 	// return if the replay has already started
 	spin_lock_bh(&replay_ops.lock);
@@ -290,7 +290,7 @@ static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 
 static void recorder_destruct(struct sock *sk){
 	// do some finish job. Print some stats
-	struct derand_replayer *r = sk->replayer;
+	struct DeterReplayer *r = sk->replayer;
 	if (!r)
 		return;
 	derand_log("recorder_destruct: h:%u t:%u\n", r->evtq.h, r->evtq.t);
@@ -302,7 +302,7 @@ static void recorder_destruct(struct sock *sk){
  * hooks for assigning sockcall id
  ***************************************/
 static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
-	struct derand_replayer *r = sk->replayer;
+	struct DeterReplayer *r = sk->replayer;
 	int sc_id;
 	if (!r)
 		return 0;
@@ -314,7 +314,7 @@ static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 }
 
 static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock, int flags, int *addr_len){
-	struct derand_replayer *r = sk->replayer;
+	struct DeterReplayer *r = sk->replayer;
 	int sc_id;
 	if (!r)
 		return 0;
@@ -326,7 +326,7 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 }
 
 static u32 new_close(struct sock *sk, long timeout){
-	struct derand_replayer *r = sk->replayer;
+	struct DeterReplayer *r = sk->replayer;
 	int sc_id;
 	if (!r)
 		return 0;
@@ -338,7 +338,7 @@ static u32 new_close(struct sock *sk, long timeout){
 }
 
 static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *optval, unsigned int optlen){
-	struct derand_replayer *r = sk->replayer;
+	struct DeterReplayer *r = sk->replayer;
 	int sc_id;
 	if (!r)
 		return 0;
@@ -353,7 +353,7 @@ static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *
  * hooks before lock
  *************************************/
 static inline void wait_before_lock(struct sock *sk, u32 type){
-	struct derand_replayer *r = (struct derand_replayer*)sk->replayer;
+	struct DeterReplayer *r = (struct DeterReplayer*)sk->replayer;
 	struct event_q *evtq;
 	u32 *seq;
 	u32 sc_id, loc;
@@ -424,7 +424,7 @@ static void sockcall_before_lock(struct sock *sk, u32 sc_id){
 }
 
 static void incoming_pkt_before_lock(struct sock *sk){
-	struct derand_replayer *r = (struct derand_replayer*)sk->replayer;
+	struct DeterReplayer *r = (struct DeterReplayer*)sk->replayer;
 	struct event_q *evtq;
 	u32 *seq;
 	u32 seq_v, evtq_h_seq_v;
@@ -475,7 +475,7 @@ static void tasklet_before_lock(struct sock *sk){
 #if ADVANCED_EVENT_ENABLE
 #define str_write(s, fmt, ...) ({ int ret; ret = sprintf((s), fmt, ##__VA_ARGS__); s+=ret; ret;})
 static inline void replay_advanced_event(const struct sock *sk, u8 type, u8 loc, u8 fmt, int n, ...){
-	struct derand_replayer *r = sk->replayer;
+	struct DeterReplayer *r = sk->replayer;
 	va_list vl;
 	char name0[32];
 	char buf[256], *s = buf;
@@ -545,7 +545,7 @@ static inline void replay_advanced_event(const struct sock *sk, u8 type, u8 loc,
 }
 #endif
 static inline void new_event(struct sock *sk, u32 type){
-	struct derand_replayer *r = (struct derand_replayer*)sk->replayer;
+	struct DeterReplayer *r = (struct DeterReplayer*)sk->replayer;
 	if (!r)
 		return;
 
@@ -581,7 +581,7 @@ static void sockcall_lock(struct sock *sk, u32 sc_id){
 }
 
 static void incoming_pkt(struct sock *sk){
-	struct derand_replayer *r = (struct derand_replayer*)sk->replayer;
+	struct DeterReplayer *r = (struct DeterReplayer*)sk->replayer;
 	if (!r)
 		return;
 	derand_log("After lock: incoming pkt\n");
@@ -605,7 +605,7 @@ static void tasklet(struct sock *sk){
 }
 
 static void record_fin_seq(struct sock *sk){
-	struct derand_replayer *r = (struct derand_replayer*)sk->replayer;
+	struct DeterReplayer *r = (struct DeterReplayer*)sk->replayer;
 	if (!r)
 		return;
 	r->pkt_idx.fin_v64 = tcp_sk(sk)->write_seq | (0x100000000);
@@ -615,7 +615,7 @@ static void record_fin_seq(struct sock *sk){
  * read values
  ***********************************/
 static unsigned long _replay_jiffies(const struct sock *sk, int id){
-	struct jiffies_q *jfq = &((struct derand_replayer*)sk->replayer)->jfq;
+	struct jiffies_q *jfq = &((struct DeterReplayer*)sk->replayer)->jfq;
 	#if ADVANCED_EVENT_ENABLE
 	replay_advanced_event(sk, -1, id, 0b0, 1, jfq->h);
 	#endif
@@ -645,7 +645,7 @@ static unsigned long replay_tcp_time_stamp(const struct sock *sk, int id){
 }
 
 static bool replay_tcp_under_memory_pressure(const struct sock *sk){
-	struct memory_pressure_q *mpq = &((struct derand_replayer*)sk->replayer)->mpq;
+	struct memory_pressure_q *mpq = &((struct DeterReplayer*)sk->replayer)->mpq;
 	bool ret;
 	if ((ret = (mpq->h < mpq->t && mpq->v[get_mp_q_idx(mpq->h)] == mpq->seq)))
 		mpq->h++;
@@ -657,7 +657,7 @@ static bool replay_tcp_under_memory_pressure(const struct sock *sk){
 }
 
 static long replay_sk_memory_allocated(const struct sock *sk){
-	struct memory_allocated_q *maq = &((struct derand_replayer*)sk->replayer)->maq;
+	struct memory_allocated_q *maq = &((struct DeterReplayer*)sk->replayer)->maq;
 	if (maq->h >= maq->t){
 		derand_log("Warning: more memory_allocated reads than recorded\n");
 		return maq->last_v;
@@ -689,7 +689,7 @@ static int replay_sk_socket_allocated_read_positive(struct sock *sk){
 }
 
 static void replay_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int loc){
-	struct mstamp_q *msq = &((struct derand_replayer*)sk->replayer)->msq;
+	struct mstamp_q *msq = &((struct DeterReplayer*)sk->replayer)->msq;
 	if (msq->h >= msq->t){
 		derand_log("Warning: more skb_mstamp_get than recorded %d\n", loc);
 		*cl = msq->v[get_mstamp_q_idx(msq->t - 1)];
@@ -703,7 +703,7 @@ static void replay_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int lo
 }
 
 static bool replay_effect_bool(const struct sock *sk, int loc){
-	struct effect_bool_q *ebq = &((struct derand_replayer*)sk->replayer)->ebq[loc];
+	struct effect_bool_q *ebq = &((struct DeterReplayer*)sk->replayer)->ebq[loc];
 	u32 idx, bit_idx, arr_idx;
 	#if ADVANCED_EVENT_ENABLE
 	if (loc != 0) // loc 0 is not serializable among all events, but just within incoming packets
@@ -722,7 +722,7 @@ static bool replay_effect_bool(const struct sock *sk, int loc){
 }
 
 static bool replay_skb_still_in_host_queue(const struct sock *sk, const struct sk_buff *skb){
-	struct SkbInQueueQ *siqq = &((struct derand_replayer*)sk->replayer)->siqq;
+	struct SkbInQueueQ *siqq = &((struct DeterReplayer*)sk->replayer)->siqq;
 	bool ret;
 	#if ADVANCED_EVENT_ENABLE
 	replay_advanced_event(sk, -7, 0, 0b0, 1, siqq->h);
@@ -731,14 +731,9 @@ static bool replay_skb_still_in_host_queue(const struct sock *sk, const struct s
 		derand_log("Warning: more skb_still_in_host_queue than recorded\n");
 		ret = false; // usually this is false
 	}else {
-		#if NEW_SIQ
 		u32 idx = get_siq_q_idx(siqq->h);
 		siqq->h++;
 		ret = (siqq->v[idx / 32] >> (idx & 31)) & 1;
-		#else
-		ret = siqq->v[get_siq_q_idx(siqq->h)];
-		siqq->h++;
-		#endif
 	}
 
 	// if true, the kernel code will skip the retransmission, so just return true
@@ -766,6 +761,15 @@ static int kernel_log(const struct sock *sk, const char *fmt, ...){
 /****************************************
  * Packet corrector
  ***************************************/
+#if USE_PKT_STREAM
+struct PacketReorderBuf{
+	struct sk_buff *skb;
+	struct nf_hook_state state;
+	u32 idx;
+};
+struct PacketReorderBuf pkt_reorder_buf[65536]; // buffer for reordering
+#endif
+
 static inline bool should_replay_skb(struct sk_buff *skb){
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
@@ -777,11 +781,15 @@ static inline bool should_replay_skb(struct sk_buff *skb){
 }
 
 static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const struct nf_hook_state *state){
-	struct derand_replayer *rep;
-	u32 idx, last_idx, i;
+	struct DeterReplayer *rep;
+	u32 idx, i;
 	u16 ipid;
+	#if !USE_PKT_STREAM
+	u32 last_idx;
 	int wrong_drop_cnt = 0, first_wrong = 0;
 	bool drop = false;
+	#endif
+	bool continue_check = true;
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
 
@@ -808,6 +816,89 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 		goto enqueue;
 	}
 
+	#if USE_PKT_STREAM
+	idx = rep->pkt_idx.idx++;
+	// TODO: check wrong drop
+
+	// check current pkt and buffered pkt
+	while (continue_check){
+		// get expected ipid of next pkt
+		u16 next_ipid;
+		if (rep->ps.n_consec == 0){
+			if (rep->ps.h < rep->ps.t){
+				if ((rep->ps.v[rep->ps.h] >> 15)){ // non-1 gap
+					rep->ps.n_consec = 1;
+					if (rep->ps.v[rep->ps.h] == 0xffff){ // next u16 is gap
+						rep->ps.h++;
+						rep->ps.gap = rep->ps.v[rep->ps.h];
+					}else if ((rep->ps.v[rep->ps.h] >> 14) & 1) // backward gap
+						rep->ps.gap = - (rep->ps.v[rep->ps.h] & 0x3fff);
+					else // forward gap
+						rep->ps.gap = (rep->ps.v[rep->ps.h] & 0x3fff);
+				}else{ // gap = 1
+					rep->ps.n_consec = rep->ps.v[rep->ps.h];
+					rep->ps.gap = 1;
+				}
+				rep->ps.h++;
+			}else { // no more pkt to receive: should drop this and all buffered pkt
+				// drop this pkt
+				kfree_skb(skb);
+				// drop all buffered pkt
+				for (i = 0; i < 65536; i++){
+					struct PacketReorderBuf *buf = &pkt_reorder_buf[i];
+					if (buf->skb){
+						kfree_skb(buf->skb);
+						buf->skb = NULL;
+					}
+				}
+				return NF_STOLEN;
+			}
+		}
+		next_ipid = (u16)rep->pkt_idx.last_ipid + rep->ps.gap;
+
+		if (skb){ // check the incoming pkt
+			if (ipid == next_ipid){
+				rep->pkt_idx.last_ipid = next_ipid;
+				enqueue(&pkt_q, skb, state);
+				skb = NULL;
+			}else { // put to reorder buf
+				struct PacketReorderBuf *buf = &pkt_reorder_buf[next_ipid];
+				// drop the old one
+				if (buf->skb != NULL)
+					kfree_skb(buf->skb);
+				// put to buf
+				buf->skb = skb;
+				buf->state = *state;
+				buf->idx = idx;
+				// stop check
+				continue_check = false;
+			}
+		}else{ // check reorder buf
+			// test if next pkt is in reorder buffer
+			struct PacketReorderBuf *buf = &pkt_reorder_buf[next_ipid];
+			if (buf->skb != NULL){
+				if (buf->idx + 32768 < idx){ // too old, regard as drop
+					kfree_skb(buf->skb);
+					continue_check = false;
+				}else{ // next pkt is in buffer, enqueue it
+					rep->pkt_idx.last_ipid = next_ipid;
+					enqueue(&pkt_q, buf->skb, &buf->state);
+				}
+				// clear this buf
+				buf->skb = NULL;
+				memset(&buf->state, 0, sizeof(struct nf_hook_state));
+				buf->idx = 0;
+			}else
+				continue_check = false;
+		}
+
+		// update state
+		if (continue_check){ // if pass the check, n_consec--
+			rep->ps.n_consec--;
+		}
+	}
+	return NF_STOLEN;
+	#else
 	// update and get pkt idx
 	last_idx = rep->pkt_idx.idx;
 	idx = update_pkt_idx(&rep->pkt_idx, ipid);
@@ -846,6 +937,7 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 
 	if (drop)
 		return NF_DROP;
+	#endif /* USE_PKT_STREAM */
 
 enqueue:
 	// enqueue this packet
@@ -862,6 +954,7 @@ static struct nf_hook_ops pc_nf_hook_ops = {
 
 int setup_packet_corrector(void){
 	pkt_q.h = pkt_q.t = 0;
+	memset(pkt_reorder_buf, 0, sizeof(pkt_reorder_buf));
 	if (nf_register_hook(&pc_nf_hook_ops)){
 		derand_log("Cannot register packet corrector's netfilter hook\n");
 		return -1;
@@ -927,7 +1020,7 @@ void unbind_replay_ops(void){
 	derand_record_ops = derand_record_ops_default;
 }
 
-static void initialize_replay(struct derand_replayer *r){
+static void initialize_replay(struct DeterReplayer *r){
 	int i;
 
 	// init sockcall_id
@@ -936,6 +1029,12 @@ static void initialize_replay(struct derand_replayer *r){
 
 	// initialize evtq
 	r->evtq.h = 0;
+
+	#if USE_PKT_STREAM
+	// initialize ps
+	r->ps.h = 0;
+	r->ps.n_consec = r->ps.gap = 0;
+	#endif
 
 	// initialize jfq
 	r->jfq.h = 0;
@@ -963,7 +1062,7 @@ static void initialize_replay(struct derand_replayer *r){
 	//derand_log("%u %u %u %u %u\n", r->evtq.t, r->jfq.t, r->mpq.t, r->maq.t, r->msq.t);
 }
 
-int replay_ops_start(struct derand_replayer *addr){
+int replay_ops_start(struct DeterReplayer *addr){
 	replay_ops.replayer = addr;
 
 	// initialize data

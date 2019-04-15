@@ -3,25 +3,29 @@
 
 #include <string>
 #include <thread>
-#include "derand_replayer.hpp"
+#include "deter_replayer.hpp"
 #include "records.hpp"
 
 class Replayer{
 public:
-	derand_replayer *d;
+	DeterReplayer *d;
 	Records rec;
 	int sockfd; // the working socket
 
 	Replayer();
-	void set_addr(void *addr){d = (derand_replayer*)addr;}
+	void set_addr(void *addr){d = (DeterReplayer*)addr;}
 	int read_records(const std::string &record_file_name);
 	int convert_event();
+	#if USE_PKT_STREAM
+	int convert_ps();
+	#else
 	int convert_drop();
+	#endif
 	int convert_jiffies();
 	int convert_memory_pressure();
 	int convert_memory_allocated();
 	int convert_mstamp();
-	int convert_siqq();
+	int convert_siq();
 	int convert_effect_bool();
 	#if ADVANCED_EVENT_ENABLE
 	int convert_advanced_event();

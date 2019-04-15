@@ -1,10 +1,8 @@
-#ifndef _SHARED_DATA_STRUCT__DERAND_REPLAYER_H
-#define _SHARED_DATA_STRUCT__DERAND_REPLAYER_H
+#ifndef _SHARED_DATA_STRUCT__DETER_REPLAYER_H
+#define _SHARED_DATA_STRUCT__DETER_REPLAYER_H
 
 #include "base_struct.h"
 #include "tcp_sock_init_data.h"
-
-#define NEW_SIQ 1
 
 #define EVENT_Q_LEN 32768
 struct event_q{
@@ -13,12 +11,21 @@ struct event_q{
 };
 #define get_event_q_idx(i) ((i) & (EVENT_Q_LEN - 1))
 
+#if USE_PKT_STREAM
+#define PS_Q_LEN 2018
+struct PsQ{
+	u32 h, t;
+	u16 n_consec, gap;
+	u16 v[PS_Q_LEN];
+};
+#else
 #define DROP_Q_LEN 1024
 struct DropQ{
 	u32 h, t;
 	u32 v[DROP_Q_LEN];
 };
 #define get_drop_q_idx(i) ((i) & (DROP_Q_LEN - 1))
+#endif
 
 #define JIFFIES_Q_LEN 8192
 struct jiffies_q{
@@ -60,21 +67,12 @@ struct effect_bool_q{
 };
 #define get_eb_q_idx(i) ((i) & (EFFECT_BOOL_Q_LEN - 1))
 
-#if NEW_SIQ
 #define SKB_IN_QUEUE_Q_LEN 256
 struct SkbInQueueQ{
 	u32 h, t;
 	u32 v[SKB_IN_QUEUE_Q_LEN/32];
 };
 #define get_siq_q_idx(i) ((i) & (SKB_IN_QUEUE_Q_LEN - 1))
-#else
-#define SKB_IN_QUEUE_Q_LEN 256
-struct SkbInQueueQ{
-	u32 h, t;
-	bool v[SKB_IN_QUEUE_Q_LEN];
-};
-#define get_siq_q_idx(i) ((i) & (SKB_IN_QUEUE_Q_LEN - 1))
-#endif
 
 #if ADVANCED_EVENT_ENABLE
 #define ADVANCED_EVENT_Q_LEN 262144
@@ -87,7 +85,7 @@ static inline u32 get_aeq_idx(u32 i){
 }
 #endif /* ADVANCED_EVENT_ENABLE */
 
-struct derand_replayer{
+struct DeterReplayer{
 	u32 mode; // 0: server, 1: client
 	u16 port; // the socket to replay should has this port number. Depending on mode, this is either sport (server) or dport (client)
 	struct tcp_sock_init_data init_data; // initial values for tcp_sock
@@ -95,20 +93,20 @@ struct derand_replayer{
 	atomic_t sockcall_id; // current socket call ID
 	struct event_q evtq;
 	struct PktIdx pkt_idx;
+	#if USE_PKT_STREAM
+	struct PsQ ps;
+	#else
 	struct DropQ dpq;
+	#endif
 	struct jiffies_q jfq;
 	struct memory_pressure_q mpq;
 	struct memory_allocated_q maq;
 	struct mstamp_q msq;
-	struct effect_bool_q ebq[DERAND_EFFECT_BOOL_N_LOC]; // effect_bool
-	#if NEW_SIQ
+	struct effect_bool_q ebq[DETER_EFFECT_BOOL_N_LOC]; // effect_bool
 	struct SkbInQueueQ siqq;
-	#else
-	struct SkbInQueueQ siqq; // skb_still_in_host_queue
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	struct AdvancedEventQ aeq;
 	#endif
 };
 
-#endif /* _SHARED_DATA_STRUCT__DERAND_REPLAYER_H */
+#endif /* _SHARED_DATA_STRUCT__DETER_REPLAYER_H */

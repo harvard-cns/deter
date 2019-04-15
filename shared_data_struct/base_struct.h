@@ -6,7 +6,7 @@
 #define DERAND_DEBUG 0
 #define ADVANCED_EVENT_ENABLE 0
 #define COLLECT_TX_STAMP 1
-#define GET_REORDER 0
+#define USE_PKT_STREAM 1
 
 /* Different types of socket calls' ID starts with different highest 4 bits */
 #define DERAND_SOCK_ID_BASE 100
@@ -151,18 +151,6 @@ static inline u32 update_pkt_idx(struct PktIdx *pkt_idx, u16 ipid){
 	pkt_idx->last_ipid = ipid;
 	return pkt_idx->idx;
 }
-
-#if GET_REORDER
-/* struct for reorder */
-struct ReorderPeriod{
-	u32 start, len;
-	u32 min, max;
-	u16 order[0];
-};
-static inline u32 size_of_ReorderPeriod(struct ReorderPeriod *r){
-	return sizeof(struct ReorderPeriod) + r->len * sizeof(r->order[0]);
-}
-#endif
 
 /* struct for a jiffies read with new value */
 union jiffies_rec{
