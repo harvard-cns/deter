@@ -317,14 +317,8 @@ public:
 	#if COLLECT_TX_STAMP
 	std::vector<uint32_t> tsq;
 	#endif
-	#if COLLECT_RX_STAMP
-	std::vector<uint32_t> rsq;
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	std::vector<u32> aeq;
-	#endif
-	#if GET_RX_PKT_IDX
-	std::vector<u32> rpq;
 	#endif
 
 	Records() : broken(0), alert(0), recorder_id(-1), active(0), fin_seq(0) {}
@@ -342,9 +336,6 @@ public:
 	uint64_t sample_timestamp(std::vector<uint64_t> &v, uint64_t th);
 	#if COLLECT_TX_STAMP
 	uint64_t tx_stamp_size();
-	#endif
-	#if COLLECT_RX_STAMP
-	uint64_t rx_stamp_size();
 	#endif
 	void print_raw_storage_size();
 	derand_rec_sockcall* evt_get_sc(derand_event *evt);

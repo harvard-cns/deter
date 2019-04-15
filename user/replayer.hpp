@@ -23,9 +23,6 @@ public:
 	int convert_mstamp();
 	int convert_siqq();
 	int convert_effect_bool();
-	#if DERAND_DEBUG
-	int convert_general_event();
-	#endif
 	#if ADVANCED_EVENT_ENABLE
 	int convert_advanced_event();
 	#endif

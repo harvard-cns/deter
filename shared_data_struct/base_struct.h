@@ -6,13 +6,6 @@
 #define DERAND_DEBUG 0
 #define ADVANCED_EVENT_ENABLE 0
 #define COLLECT_TX_STAMP 1
-#define COLLECT_RX_STAMP 0
-#define GET_EVENT_STAMP 0
-#define GET_CWND 0
-#define GET_RX_PKT_IDX 0
-#define GET_WRITE_SEQ_PER_SOCKCALL 0
-#define GET_TS_PER_SOCKCALL 0
-#define GET_BOTTLENECK 0
 #define GET_REORDER 0
 
 /* Different types of socket calls' ID starts with different highest 4 bits */
@@ -68,20 +61,6 @@ struct derand_rec_sockcall{
 		struct derand_rec_sockcall_setsockopt setsockopt;
 	};
 	u64 thread_id;
-	#if GET_TS_PER_SOCKCALL
-	u64 ts;
-	#endif
-	#if GET_WRITE_SEQ_PER_SOCKCALL
-	u32 write_seq;
-	u32 snd_una, snd_nxt;
-	#endif
-	#if GET_BOTTLENECK
-	// two categories: not app limited, app limited
-	// within each, three sub-categories: network anormly, receiver limit, other
-	// Note, these are in microseconds, so use u32
-	u32 net, recv, other;
-	u32 app_net, app_recv, app_other;
-	#endif
 };
 static inline const char* get_sockcall_str(struct derand_rec_sockcall *sc, char* buf){
 	switch (sc->type){
@@ -118,16 +97,6 @@ static inline const char* get_sockcall_str(struct derand_rec_sockcall *sc, char*
 struct derand_event{
 	u32 seq;
 	u32 type; // 0: pkt; 1: tsq; 2~98: timeout types; 99: finish; 100 ~ inf: socket call IDs + DERAND_SOCK_ID_BASE
-	#if DERAND_DEBUG
-	u32 dbg_data;
-	#endif
-	#if GET_EVENT_STAMP
-	u64 ts;
-	#endif
-	#if GET_CWND
-	u32 cwnd, ssthresh;
-	u32 is_cwnd_limited;
-	#endif
 };
 static inline bool evt_is_sockcall(const struct derand_event* e){
 	return e->type >= DERAND_SOCK_ID_BASE;

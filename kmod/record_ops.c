@@ -252,32 +252,6 @@ static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 	}
 }
 
-#if GET_BOTTLENECK
-static inline void record_bottleneck(struct sock *sk, struct DeterRecorder *rec){
-	struct tcp_sock *tp = tcp_sk(sk);
-	u64 now = ktime_get().tv64;
-	if (tp->snd_una != tp->write_seq){ // active
-		if (sk->sk_socket && test_bit(SOCK_NOSPACE, &sk->sk_socket->flags)){ // sendbuf limit, meaning app has enough to send
-			if (inet_csk(sk)->icsk_ca_state != TCP_CA_Open){ // network anormly
-				rec->net += now - rec->last_bottleneck_update_time;
-			}else if (tp->snd_nxt - tp->snd_una + tp->mss_cache > tp->snd_wnd){ // receiver limit
-				rec->recv += now - rec->last_bottleneck_update_time;
-			}else
-				rec->other += now - rec->last_bottleneck_update_time;
-		}else{ // app may not have enough to send
-			if (inet_csk(sk)->icsk_ca_state != TCP_CA_Open){ // network anormly
-				rec->app_net += now - rec->last_bottleneck_update_time;
-			}else if (tp->snd_nxt - tp->snd_una + tp->mss_cache > tp->snd_wnd){ // receiver limit
-				rec->app_recv += now - rec->last_bottleneck_update_time;
-			}else
-				rec->app_other += now - rec->last_bottleneck_update_time;
-		}
-	}// else, inactive. ignore the period, because nothing to send
-	// update last timestamp
-	rec->last_bottleneck_update_time = now;
-}
-#endif
-
 /* this function should be called in thread_safe environment */
 static inline void new_event(struct sock *sk, u32 type){
 	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
@@ -515,9 +489,6 @@ static void incoming_pkt(struct sock *sk){
 	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
 	if (!rec)
 		return;
-	#if GET_BOTTLENECK
-	record_bottleneck(sk, rec);
-	#endif
 	rec->seq++;
 }
 
@@ -540,15 +511,6 @@ static void tasklet(struct sock *sk){
 /********************************************
  * monitor network action: drop & ecn
  *******************************************/
-#if COLLECT_RX_STAMP
-static inline void rx_stamp(struct DeterRecorder *rec){
-	u64 clock = local_clock();
-	rec->rsq.v[get_rsq_idx(rec->rsq.t)] = clock;
-	wmb();
-	rec->rsq.t++;
-}
-#endif
-
 #if GET_REORDER
 static inline u32 get_map_idx(u32 idx){
 	return idx & (DERAND_MAX_REORDER - 1);
@@ -649,10 +611,6 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	if (!rec)
 		return;
 
-	#if COLLECT_RX_STAMP
-	rx_stamp(rec);
-	#endif
-
 	// if this packet ackes our fin, skip. ipid from the other side may not be consecutive after acking our fin
 	if (rec->pkt_idx.fin && (ntohl(tcph->ack_seq) == rec->pkt_idx.fin_seq + 1 || ntohl(tcph->ack_seq) == rec->pkt_idx.fin_seq + 2))
 		return;
@@ -668,11 +626,6 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 
 	gap = get_pkt_idx_gap(&rec->pkt_idx, ipid);
 	idx = rec->pkt_idx.idx;
-	#if GET_RX_PKT_IDX
-	rec->rpq.v[get_rx_pkt_q_idx(rec->rpq.t)] = ipid;
-	wmb();
-	rec->rpq.t++;
-	#endif
 
 	#if GET_REORDER
 	idx = rec->pkt_idx.idx + gap; // the index of this packet. pkt_idx.idx is unchanged until we know it is in order, so it represents the next in-order index

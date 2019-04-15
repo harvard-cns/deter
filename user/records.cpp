@@ -161,12 +161,6 @@ int Records::dump(const char* filename){
 		goto fail_write;
 	#endif
 
-	#if COLLECT_RX_STAMP
-	// write rsq
-	if (!dump_vector(rsq, fout))
-		goto fail_write;
-	#endif
-
 	// write effect_bool
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		if (!ebq[i].dump(fout))
@@ -175,12 +169,6 @@ int Records::dump(const char* filename){
 	#if ADVANCED_EVENT_ENABLE
 	// write aeq
 	if (!dump_vector(aeq, fout))
-		goto fail_write;
-	#endif
-
-	#if GET_RX_PKT_IDX
-	// write drop
-	if (!dump_vector(rpq, fout))
 		goto fail_write;
 	#endif
 
@@ -270,12 +258,6 @@ int Records::read(const char* filename){
 		goto fail_read;
 	#endif
 
-	#if COLLECT_RX_STAMP
-	// read rsq
-	if (!read_vector(rsq, fin))
-		goto fail_read;
-	#endif
-
 	// read effect_bool
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		if (!ebq[i].read(fin))
@@ -284,12 +266,6 @@ int Records::read(const char* filename){
 	#if ADVANCED_EVENT_ENABLE
 	// read aeq
 	if (!read_vector(aeq, fin))
-		goto fail_read;
-	#endif
-
-	#if GET_RX_PKT_IDX
-	// read drop
-	if (!read_vector(rpq, fin))
 		goto fail_read;
 	#endif
 
@@ -463,34 +439,16 @@ void Records::print(FILE* fout){
 			}else 
 				fprintf(fout, "Error: unsupported setsockopt\n");
 		}
-		#if GET_TS_PER_SOCKCALL
-		fprintf(fout, " ts:%lu", sc.ts);
-		#endif
-		#if GET_WRITE_SEQ_PER_SOCKCALL
-		fprintf(fout, " write_seq:%u snd_una:%u snd_nxt:%u", sc.write_seq, sc.snd_una, sc.snd_nxt);
-		#endif
-		#if GET_BOTTLENECK
-		fprintf(fout, " lmt[net:%u,%u rcv:%u,%u other:%u,%u]", sc.net, sc.app_net, sc.recv, sc.app_recv, sc.other, sc.app_other);
-		#endif
 		fprintf(fout, "\n");
 	}
 	fprintf(fout, "%lu events\n", evts.size());
 	for (int i = 0; i < evts.size(); i++){
 		derand_event &e = evts[i];
 		char buf[32];
-		#if GET_EVENT_STAMP
-		fprintf(fout, "%.9lf ", e.ts * 1e-9);
-		#endif
 		fprintf(fout, "%u %s", e.seq, get_event_name(e.type, buf));
 		if (e.type >= DERAND_SOCK_ID_BASE)
 			fprintf(fout, " %s", get_sockcall_str(&sockcalls[get_sockcall_idx(e.type)], buf));
 
-		#if DERAND_DEBUG
-		fprintf(fout, " %u", e.dbg_data);
-		#endif
-		#if GET_CWND
-		fprintf(fout, " %u %u %u", e.cwnd, e.ssthresh, e.is_cwnd_limited);
-		#endif
 		fprintf(fout, "\n");
 	}
 
@@ -510,12 +468,6 @@ void Records::print(FILE* fout){
 			i += size_of_ReorderPeriod(r);
 		}
 	}
-	#endif
-
-	#if GET_RX_PKT_IDX
-	fprintf(fout, "%lu rpq\n", rpq.size());
-	for (uint32_t i = 0; i < rpq.size(); i++)
-		fprintf(fout, "%u\n", rpq[i]);
 	#endif
 
 	fprintf(fout, "%lu new jiffies\n", jiffies.size());
@@ -556,12 +508,6 @@ void Records::print(FILE* fout){
 	fprintf(fout, "%lu tsq:\n", tsq.size());
 	for (int64_t i = 0; i < tsq.size(); i++)
 		fprintf(fout, "%u %u\n", tsq[i], (tsq[i] - (i?tsq[i-1]:0)) / 1000);
-	#endif
-
-	#if COLLECT_RX_STAMP
-	fprintf(fout, "%lu rsq:\n", rsq.size());
-	for (int64_t i = 0; i < rsq.size(); i++)
-		fprintf(fout, "%u\n", rsq[i]);
 	#endif
 
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
@@ -731,9 +677,6 @@ void Records::clear(){
 	#if GET_REORDER
 	reorder.clear();
 	#endif
-	#if GET_RX_PKT_IDX
-	rpq.clear();
-	#endif
 	jiffies.clear();
 	mpq.clear();
 	memory_allocated.clear();
@@ -743,9 +686,6 @@ void Records::clear(){
 	siq.clear();
 	#if COLLECT_TX_STAMP
 	tsq.clear();
-	#endif
-	#if COLLECT_RX_STAMP
-	rsq.clear();
 	#endif
 	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
 		ebq[i].clear();
@@ -788,14 +728,6 @@ uint64_t Records::tx_stamp_size(){
 	return sample_timestamp(v, 50); // 100-nanosecond
 }
 #endif
-#if COLLECT_RX_STAMP
-uint64_t Records::rx_stamp_size(){
-	vector<uint64_t> v;
-	for (auto x : rsq)
-		v.push_back(x / 1000);
-	return sample_timestamp(v, 50); // 100-nanosecond
-}
-#endif
 
 void Records::print_raw_storage_size(){
 	uint64_t this_size = 0;
@@ -832,11 +764,6 @@ void Records::print_raw_storage_size(){
 	this_size = tx_stamp_size();
 	size += this_size;
 	printf("tx_stamp: %lu\n", this_size);
-	#endif
-	#if COLLECT_RX_STAMP
-	this_size = rx_stamp_size();
-	size += this_size;
-	printf("rx_stamp: %lu\n", this_size);
 	#endif
 	printf("total: %lu\n", size);
 }
@@ -1082,13 +1009,6 @@ void Records::print_compressed_storage_size(){
 		this_size = tx_stamp_size();
 		size += this_size;
 		printf("tx_stamp: %lu\n", this_size);
-	}
-	#endif
-	#if COLLECT_RX_STAMP
-	{
-		this_size = rx_stamp_size();
-		size += this_size;
-		printf("rx_stamp: %lu\n", this_size);
 	}
 	#endif
 	printf("compressed total: %lu\n", size);
