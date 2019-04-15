@@ -98,7 +98,7 @@ int Replayer::convert_siqq(){
 	#if NEW_SIQ
 	auto &s = rec.siq;
 	if (s.n > SKB_IN_QUEUE_Q_LEN){
-		fprintf(stderr, "to many siqq: %u > u\n", s.n, SKB_IN_QUEUE_Q_LEN);
+		fprintf(stderr, "to many siqq: %u > %u\n", s.n, SKB_IN_QUEUE_Q_LEN);
 		return -1;
 	}
 	d->siqq.h = 0;
