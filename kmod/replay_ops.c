@@ -867,7 +867,7 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 				enqueue(&pkt_q, skb, state);
 				skb = NULL;
 			}else { // put to reorder buf
-				struct PacketReorderBuf *buf = &pkt_reorder_buf[next_ipid];
+				struct PacketReorderBuf *buf = &pkt_reorder_buf[ipid];
 				// drop the old one
 				if (buf->skb != NULL)
 					kfree_skb(buf->skb);
