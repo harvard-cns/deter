@@ -1,7 +1,7 @@
 #ifndef _RECORD_CTRL_H
 #define _RECORD_CTRL_H
 
-#include <net/derand.h>
+#include <net/deter.h>
 #include <linux/spinlock.h>
 
 int create_record_ctrl(void);

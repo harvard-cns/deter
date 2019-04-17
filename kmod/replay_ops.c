@@ -4,12 +4,12 @@
 #include <linux/netfilter_ipv4.h>
 #include <net/tcp.h>
 #include <linux/skbuff.h>
-#include <net/derand_ops.h>
+#include <net/deter_ops.h>
 #include "replay_ops.h"
 #include "copy_to_sock_init_val.h"
 #include "logger.h"
 
-void derand_tcp_tasklet_func(struct sock *sk);
+void deter_tcp_tasklet_func(struct sock *sk);
 
 struct replay_ops replay_ops = {
 	.replayer = NULL,
@@ -144,7 +144,7 @@ int replay_kthread(void *args){
 		// issue this event
 		switch (evtq->v[get_event_q_idx(i)].type){
 			case EVENT_TYPE_TASKLET:
-				derand_tcp_tasklet_func(replay_ops.sk);
+				deter_tcp_tasklet_func(replay_ops.sk);
 				break;
 			case EVENT_TYPE_WRITE_TIMEOUT:
 				// We must deactivate the timers, because it affects sk->refcnt. The timer function calls sk_reset_timer(), which inc refcnt only if the timer is inactive/expired. Thus, if we do not deactivate the timer here, refcnt will not inc. Same for other timers.
@@ -932,52 +932,52 @@ int bind_replay_ops(void){
 	if (setup_packet_corrector())
 		return -1;
 
-	derand_record_ops.recorder_destruct = recorder_destruct;
-	derand_record_ops.new_sendmsg = new_sendmsg;
-	//derand_record_ops.new_sendpage = new_sendpage;
-	derand_record_ops.new_recvmsg = new_recvmsg;
-	derand_record_ops.new_close = new_close;
-	derand_record_ops.new_setsockopt = new_setsockopt;
-	derand_record_ops.sockcall_lock = sockcall_lock;
-	derand_record_ops.incoming_pkt = incoming_pkt;
-	derand_record_ops.write_timer = write_timer;
-	derand_record_ops.delack_timer = delack_timer;
-	derand_record_ops.keepalive_timer = keepalive_timer;
-	derand_record_ops.tasklet = tasklet;
-	derand_record_ops.record_fin_seq = record_fin_seq;
+	deter_record_ops.recorder_destruct = recorder_destruct;
+	deter_record_ops.new_sendmsg = new_sendmsg;
+	//deter_record_ops.new_sendpage = new_sendpage;
+	deter_record_ops.new_recvmsg = new_recvmsg;
+	deter_record_ops.new_close = new_close;
+	deter_record_ops.new_setsockopt = new_setsockopt;
+	deter_record_ops.sockcall_lock = sockcall_lock;
+	deter_record_ops.incoming_pkt = incoming_pkt;
+	deter_record_ops.write_timer = write_timer;
+	deter_record_ops.delack_timer = delack_timer;
+	deter_record_ops.keepalive_timer = keepalive_timer;
+	deter_record_ops.tasklet = tasklet;
+	deter_record_ops.record_fin_seq = record_fin_seq;
 
-	derand_record_ops.sockcall_before_lock = sockcall_before_lock;
-	derand_record_ops.incoming_pkt_before_lock = incoming_pkt_before_lock;
-	derand_record_ops.write_timer_before_lock = write_timer_before_lock;
-	derand_record_ops.delack_timer_before_lock = delack_timer_before_lock;
-	derand_record_ops.keepalive_timer_before_lock = keepalive_timer_before_lock;
-	derand_record_ops.tasklet_before_lock = tasklet_before_lock;
-	derand_record_ops.to_replay_server = to_replay_server;
+	deter_record_ops.sockcall_before_lock = sockcall_before_lock;
+	deter_record_ops.incoming_pkt_before_lock = incoming_pkt_before_lock;
+	deter_record_ops.write_timer_before_lock = write_timer_before_lock;
+	deter_record_ops.delack_timer_before_lock = delack_timer_before_lock;
+	deter_record_ops.keepalive_timer_before_lock = keepalive_timer_before_lock;
+	deter_record_ops.tasklet_before_lock = tasklet_before_lock;
+	deter_record_ops.to_replay_server = to_replay_server;
 
-	derand_record_ops.replay_jiffies = replay_jiffies;
-	derand_record_ops.replay_tcp_time_stamp = replay_tcp_time_stamp;
-	derand_record_ops.replay_tcp_under_memory_pressure = replay_tcp_under_memory_pressure;
-	derand_record_ops.replay_sk_under_memory_pressure = replay_tcp_under_memory_pressure;
-	derand_record_ops.replay_sk_memory_allocated = replay_sk_memory_allocated;
-	derand_record_ops.replay_sk_socket_allocated_read_positive = replay_sk_socket_allocated_read_positive;
-	derand_record_ops.skb_mstamp_get = replay_skb_mstamp_get;
-	derand_record_ops.replay_skb_still_in_host_queue = replay_skb_still_in_host_queue;
+	deter_record_ops.replay_jiffies = replay_jiffies;
+	deter_record_ops.replay_tcp_time_stamp = replay_tcp_time_stamp;
+	deter_record_ops.replay_tcp_under_memory_pressure = replay_tcp_under_memory_pressure;
+	deter_record_ops.replay_sk_under_memory_pressure = replay_tcp_under_memory_pressure;
+	deter_record_ops.replay_sk_memory_allocated = replay_sk_memory_allocated;
+	deter_record_ops.replay_sk_socket_allocated_read_positive = replay_sk_socket_allocated_read_positive;
+	deter_record_ops.skb_mstamp_get = replay_skb_mstamp_get;
+	deter_record_ops.replay_skb_still_in_host_queue = replay_skb_still_in_host_queue;
 	#if ADVANCED_EVENT_ENABLE
 	advanced_event = replay_advanced_event;
 	#endif
-	derand_record_ops.log = kernel_log;
-	derand_replay_effect_bool = replay_effect_bool;
+	deter_record_ops.log = kernel_log;
+	deter_replay_effect_bool = replay_effect_bool;
 
 	/* The recorder_create functions must be bind last, because they are the enabler of record */
-	derand_record_ops.server_recorder_create = server_recorder_create;
-	derand_record_ops.client_recorder_create = client_recorder_create;
+	deter_record_ops.server_recorder_create = server_recorder_create;
+	deter_record_ops.client_recorder_create = client_recorder_create;
 	return 0;
 }
 
 void unbind_replay_ops(void){
 	stop_packet_corrector();
-	derand_replay_effect_bool = NULL;
-	derand_record_ops = derand_record_ops_default;
+	deter_replay_effect_bool = NULL;
+	deter_record_ops = deter_record_ops_default;
 }
 
 static void initialize_replay(struct DeterReplayer *r){

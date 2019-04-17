@@ -1,7 +1,7 @@
 #include <net/tcp.h>
 #include <linux/string.h>
-#include <net/derand.h>
-#include <net/derand_ops.h>
+#include <net/deter.h>
+#include <net/deter_ops.h>
 #include "deter_recorder.h"
 #include "mem_block_ops.h"
 #include "copy_from_sock_init_val.h"
@@ -773,48 +773,48 @@ static void record_alert(const struct sock *sk, int loc){
 }
 
 int bind_record_ops(void){
-	derand_record_ops.recorder_destruct = recorder_destruct;
-	derand_record_ops.new_sendmsg = new_sendmsg;
-	//derand_record_ops.new_sendpage = new_sendpage;
-	derand_record_ops.new_recvmsg = new_recvmsg;
-	derand_record_ops.new_splice_read = new_splice_read;
-	derand_record_ops.new_close = new_close;
-	derand_record_ops.new_setsockopt = new_setsockopt;
-	derand_record_ops.sockcall_lock = sockcall_lock;
-	derand_record_ops.incoming_pkt = incoming_pkt;
-	derand_record_ops.write_timer = write_timer;
-	derand_record_ops.delack_timer = delack_timer;
-	derand_record_ops.keepalive_timer = keepalive_timer;
-	derand_record_ops.tasklet = tasklet;
-	derand_record_ops.mon_net_action = mon_net_action;
-	derand_record_ops.record_fin_seq = record_fin_seq;
-	derand_record_ops.read_jiffies = read_jiffies;
-	derand_record_ops.read_tcp_time_stamp = read_tcp_time_stamp; // store jiffies and tcp_time_stamp together
-	derand_record_ops.tcp_under_memory_pressure = record_tcp_under_memory_pressure;
-	derand_record_ops.sk_under_memory_pressure = record_sk_under_memory_pressure;
-	derand_record_ops.sk_memory_allocated = record_sk_memory_allocated;
-	derand_record_ops.sk_sockets_allocated_read_positive = record_sk_sockets_allocated_read_positive;
-	derand_record_ops.skb_mstamp_get = record_skb_mstamp_get;
-	derand_record_ops.record_skb_still_in_host_queue = record_skb_still_in_host_queue;
+	deter_record_ops.recorder_destruct = recorder_destruct;
+	deter_record_ops.new_sendmsg = new_sendmsg;
+	//deter_record_ops.new_sendpage = new_sendpage;
+	deter_record_ops.new_recvmsg = new_recvmsg;
+	deter_record_ops.new_splice_read = new_splice_read;
+	deter_record_ops.new_close = new_close;
+	deter_record_ops.new_setsockopt = new_setsockopt;
+	deter_record_ops.sockcall_lock = sockcall_lock;
+	deter_record_ops.incoming_pkt = incoming_pkt;
+	deter_record_ops.write_timer = write_timer;
+	deter_record_ops.delack_timer = delack_timer;
+	deter_record_ops.keepalive_timer = keepalive_timer;
+	deter_record_ops.tasklet = tasklet;
+	deter_record_ops.mon_net_action = mon_net_action;
+	deter_record_ops.record_fin_seq = record_fin_seq;
+	deter_record_ops.read_jiffies = read_jiffies;
+	deter_record_ops.read_tcp_time_stamp = read_tcp_time_stamp; // store jiffies and tcp_time_stamp together
+	deter_record_ops.tcp_under_memory_pressure = record_tcp_under_memory_pressure;
+	deter_record_ops.sk_under_memory_pressure = record_sk_under_memory_pressure;
+	deter_record_ops.sk_memory_allocated = record_sk_memory_allocated;
+	deter_record_ops.sk_sockets_allocated_read_positive = record_sk_sockets_allocated_read_positive;
+	deter_record_ops.skb_mstamp_get = record_skb_mstamp_get;
+	deter_record_ops.record_skb_still_in_host_queue = record_skb_still_in_host_queue;
 	#if COLLECT_TX_STAMP
-	derand_record_ops.tx_stamp = tx_stamp;
+	deter_record_ops.tx_stamp = tx_stamp;
 	#endif
 	#if ADVANCED_EVENT_ENABLE
 	advanced_event = record_advanced_event;
 	#endif
-	derand_record_effect_bool = record_effect_bool;
-	derand_record_alert = record_alert;
+	deter_record_effect_bool = record_effect_bool;
+	deter_record_alert = record_alert;
 
 	/* The recorder_create functions must be bind last, because they are the enabler of record */
-	derand_record_ops.server_recorder_create = server_recorder_create;
-	derand_record_ops.client_recorder_create = client_recorder_create;
+	deter_record_ops.server_recorder_create = server_recorder_create;
+	deter_record_ops.client_recorder_create = client_recorder_create;
 	return 0;
 }
 void unbind_record_ops(void){
-	derand_record_effect_bool = NULL;
-	derand_record_alert = NULL;
+	deter_record_effect_bool = NULL;
+	deter_record_alert = NULL;
 	#if ADVANCED_EVENT_ENABLE
 	advanced_event = NULL;
 	#endif
-	derand_record_ops = derand_record_ops_default;
+	deter_record_ops = deter_record_ops_default;
 }
