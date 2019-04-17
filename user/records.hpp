@@ -300,8 +300,8 @@ public:
 	uint16_t sport, dport;
 	uint32_t fin_seq;
 	tcp_sock_init_data init_data;
-	std::vector<derand_event> evts;
-	std::vector<derand_rec_sockcall> sockcalls;
+	std::vector<deter_event> evts;
+	std::vector<deter_rec_sockcall> sockcalls;
 	std::vector<uint16_t> ps;
 	std::vector<jiffies_rec> jiffies;
 	BitArray mpq;
@@ -310,7 +310,7 @@ public:
 	std::vector<skb_mstamp> mstamp;
 	std::vector<uint8_t> siqq;
 	BitArray siq;
-	BitArray ebq[DERAND_EFFECT_BOOL_N_LOC];
+	BitArray ebq[DETER_EFFECT_BOOL_N_LOC];
 	#if COLLECT_TX_STAMP
 	std::vector<uint32_t> tsq;
 	#endif
@@ -335,7 +335,7 @@ public:
 	uint64_t tx_stamp_size();
 	#endif
 	void print_raw_storage_size();
-	derand_rec_sockcall* evt_get_sc(derand_event *evt);
+	deter_rec_sockcall* evt_get_sc(deter_event *evt);
 	uint64_t compressed_evt_size();
 	uint64_t compressed_sockcall_size();
 	uint64_t compressed_memory_allocated_size();

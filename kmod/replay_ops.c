@@ -9,7 +9,7 @@
 #include "copy_to_sock_init_val.h"
 #include "logger.h"
 
-void derand_tcp_tasklet_func(struct sock *sk);
+void deter_tcp_tasklet_func(struct sock *sk);
 
 struct replay_ops replay_ops = {
 	.replayer = NULL,
@@ -28,16 +28,16 @@ static struct task_struct *replay_task = NULL;
  ******************************************************/
 void logging_stats(struct DeterReplayer *r){
 	int i;
-	derand_log("replay finish, destruct replayer\n");
-	derand_log("sockcall_id: %d\n", atomic_read(&r->sockcall_id));
-	derand_log("seq: %u\n", r->seq);
-	derand_log("evtq: h=%u t=%u\n", r->evtq.h, r->evtq.t);
-	derand_log("jfq: h=%u t=%u\n", r->jfq.h, r->jfq.t);
-	derand_log("mpq: h=%u t=%u\n", r->mpq.h, r->mpq.t);
-	derand_log("maq: h=%u t=%u\n", r->maq.h, r->maq.t);
-	derand_log("msq: h=%u t=%u\n", r->msq.h, r->msq.t);
-	for (i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
-		derand_log("ebq[%d]: h=%u t=%u\n", i, r->ebq[i].h, r->ebq[i].t);
+	deter_log("replay finish, destruct replayer\n");
+	deter_log("sockcall_id: %d\n", atomic_read(&r->sockcall_id));
+	deter_log("seq: %u\n", r->seq);
+	deter_log("evtq: h=%u t=%u\n", r->evtq.h, r->evtq.t);
+	deter_log("jfq: h=%u t=%u\n", r->jfq.h, r->jfq.t);
+	deter_log("mpq: h=%u t=%u\n", r->mpq.h, r->mpq.t);
+	deter_log("maq: h=%u t=%u\n", r->maq.h, r->maq.t);
+	deter_log("msq: h=%u t=%u\n", r->msq.h, r->msq.t);
+	for (i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++)
+		deter_log("ebq[%d]: h=%u t=%u\n", i, r->ebq[i].h, r->ebq[i].t);
 }
 
 /********************************************************
@@ -62,7 +62,7 @@ struct PacketQueue pkt_q;
 // enqueue
 static inline void enqueue(struct PacketQueue *q, struct sk_buff *skb, const struct nf_hook_state *state){
 	if (unlikely(q->t >= q->h + PACKET_QUEUE_SIZE)){
-		derand_log("WARNING: PacketQueue full!\n");
+		deter_log("WARNING: PacketQueue full!\n");
 		return;
 	}
 	rmb();
@@ -81,7 +81,7 @@ static int dequeue(struct PacketQueue *q){
 	{
 		struct iphdr *iph = ip_hdr(p->skb);
 		u16 ipid = ntohs(iph->id);
-		derand_log("dequeue pkt ipid=%hu\n", ipid);
+		deter_log("dequeue pkt ipid=%hu\n", ipid);
 	}
 
 	// because we are replaying bh events, we want to disable bh & preempt
@@ -103,7 +103,7 @@ int replay_kthread(void *args){
 	int i, n_pkt_btw;
 	struct event_q *evtq = &replay_ops.replayer->evtq;
 	u32 cnt = 0;
-	derand_log("replay_kthread started\n");
+	deter_log("replay_kthread started\n");
 
 	while (replay_ops.state == NOT_STARTED);
 	if (replay_ops.state >= SHOULD_STOP)
@@ -118,33 +118,33 @@ int replay_kthread(void *args){
 	 * */
 	for (i = 0, n_pkt_btw = 0; i < evtq->t && replay_ops.state == STARTED; i++){
 		// skip sockcall
-		if (evtq->v[get_event_q_idx(i)].type >= DERAND_SOCK_ID_BASE){
+		if (evtq->v[get_event_q_idx(i)].type >= DETER_SOCK_ID_BASE){
 			n_pkt_btw--; // n_pkt_btw-- for every sockcall
 			continue;
 		}
 		n_pkt_btw += evtq->v[get_event_q_idx(i)].seq; // n_pkt_btw += current_seq
-		derand_log("[kthread] next: %d pkts, evtq->v[%d(%d)]={seq:%u, type:%u}\n", n_pkt_btw, get_event_q_idx(i), i, evtq->v[get_event_q_idx(i)].seq, evtq->v[get_event_q_idx(i)].type);
+		deter_log("[kthread] next: %d pkts, evtq->v[%d(%d)]={seq:%u, type:%u}\n", n_pkt_btw, get_event_q_idx(i), i, evtq->v[get_event_q_idx(i)].seq, evtq->v[get_event_q_idx(i)].type);
 
 		// send packets in between
 		for (; n_pkt_btw && replay_ops.state == STARTED; n_pkt_btw--){
 			cnt = 0;
 			while (replay_ops.state == STARTED && dequeue(&pkt_q)){
 				cnt++;
-				#if DERAND_DEBUG
+				#if DETER_DEBUG
 				if (!(cnt & 0x0fffffff))
-					derand_log("[kthread] long wait for pkt: irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", irqs_disabled(), in_interrupt(), local_softirq_pending());
+					deter_log("[kthread] long wait for pkt: irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", irqs_disabled(), in_interrupt(), local_softirq_pending());
 				#endif
 			}
-			derand_log("[kthread] sent a packet, %d remains\n", n_pkt_btw - 1);
+			deter_log("[kthread] sent a packet, %d remains\n", n_pkt_btw - 1);
 		}
 
 		preempt_disable();
 		local_bh_disable();
-		derand_log("[kthread] BEFORE issuing the event of type %u\n", evtq->v[get_event_q_idx(i)].type);
+		deter_log("[kthread] BEFORE issuing the event of type %u\n", evtq->v[get_event_q_idx(i)].type);
 		// issue this event
 		switch (evtq->v[get_event_q_idx(i)].type){
 			case EVENT_TYPE_TASKLET:
-				derand_tcp_tasklet_func(replay_ops.sk);
+				deter_tcp_tasklet_func(replay_ops.sk);
 				break;
 			case EVENT_TYPE_WRITE_TIMEOUT:
 				// We must deactivate the timers, because it affects sk->refcnt. The timer function calls sk_reset_timer(), which inc refcnt only if the timer is inactive/expired. Thus, if we do not deactivate the timer here, refcnt will not inc. Same for other timers.
@@ -162,9 +162,9 @@ int replay_kthread(void *args){
 			case EVENT_TYPE_FINISH:
 				break;
 			default:
-				derand_log("[kthread] WARNING: unknown event type: %d\n", evtq->v[get_event_q_idx(i)].type);
+				deter_log("[kthread] WARNING: unknown event type: %d\n", evtq->v[get_event_q_idx(i)].type);
 		}
-		derand_log("[kthread] AFTER issuing the event of type %u\n", evtq->v[get_event_q_idx(i)].type);
+		deter_log("[kthread] AFTER issuing the event of type %u\n", evtq->v[get_event_q_idx(i)].type);
 		local_bh_enable();
 		preempt_enable();
 
@@ -173,7 +173,7 @@ int replay_kthread(void *args){
 	}
 
 end:
-	derand_log("[kthread] kthread finishes\n");
+	deter_log("[kthread] kthread finishes\n");
 	replay_ops.state = STOPPED;
 	return 0;
 }
@@ -239,11 +239,11 @@ static inline void replayer_create(struct sock *sk, struct sk_buff *skb){
 	replay_ops.sk = sk;
 
 	// copy sock init data
-	derand_log("copy init variables to the sock\n");
+	deter_log("copy init variables to the sock\n");
 	copy_to_sock(sk);
 
 	// set timer handlers to null function
-	derand_log("record timer; set timer to Null\n");
+	deter_log("record timer; set timer to Null\n");
 	set_null_timer(sk);
 
 	// mark started, so other sockets won't get replayed
@@ -269,7 +269,7 @@ static void server_recorder_create(struct sock *sk, struct sk_buff *skb){
 	if (!to_replay_server(sk))
 		return;
 
-	derand_log("a new server sock created\n");
+	deter_log("a new server sock created\n");
 
 	replayer_create(sk, skb);
 }
@@ -288,7 +288,7 @@ static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 	if (dport != replay_ops.replayer->port)
 		return;
 
-	derand_log("a new client sock created\n");
+	deter_log("a new client sock created\n");
 
 	replayer_create(sk, skb);
 }
@@ -300,7 +300,7 @@ static void recorder_destruct(struct sock *sk){
 	if (!r)
 		return;
 	finish_sock(sk);
-	derand_log("recorder_destruct: h:%u t:%u\n", r->evtq.h, r->evtq.t);
+	deter_log("recorder_destruct: h:%u t:%u\n", r->evtq.h, r->evtq.t);
 	if (replay_ops.state == STARTED)
 		replay_ops.state = SHOULD_STOP;
 }
@@ -316,7 +316,7 @@ static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 
 	// get sockcall ID
 	sc_id = atomic_add_return(1, &r->sockcall_id) - 1;
-	derand_log("a new tcp_sendmsg, assign id %d\n", sc_id);
+	deter_log("a new tcp_sendmsg, assign id %d\n", sc_id);
 	return sc_id;
 }
 
@@ -328,7 +328,7 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 
 	// get sockcall ID
 	sc_id = atomic_add_return(1, &r->sockcall_id) - 1;
-	derand_log("a new tcp_recvmsg, assign id %d\n", sc_id);
+	deter_log("a new tcp_recvmsg, assign id %d\n", sc_id);
 	return sc_id;
 }
 
@@ -340,7 +340,7 @@ static u32 new_close(struct sock *sk, long timeout){
 
 	// get sockcall ID
 	sc_id = atomic_add_return(1, &r->sockcall_id) - 1;
-	derand_log("a new tcp_close, assign id %d\n", sc_id);
+	deter_log("a new tcp_close, assign id %d\n", sc_id);
 	return sc_id;
 }
 
@@ -352,7 +352,7 @@ static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *
 
 	// get sockcall ID
 	sc_id = atomic_add_return(1, &r->sockcall_id) - 1;
-	derand_log("a new setsockopt, assign id %d\n", sc_id);
+	deter_log("a new setsockopt, assign id %d\n", sc_id);
 	return sc_id;
 }
 
@@ -365,7 +365,7 @@ static inline void wait_before_lock(struct sock *sk, u32 type){
 	u32 *seq;
 	u32 sc_id, loc;
 	u32 evtq_h;
-	#if DERAND_DEBUG
+	#if DETER_DEBUG
 	u32 cnt = 0;
 	#endif
 	if (!r)
@@ -373,15 +373,15 @@ static inline void wait_before_lock(struct sock *sk, u32 type){
 	evtq = &r->evtq;
 	seq = &r->seq;
 
-	if (type >= DERAND_SOCK_ID_BASE){
-		sc_id = (type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
-		loc = (type - DERAND_SOCK_ID_BASE) >> 28;
-		derand_log("Before lock: sockcall %u (%u %u); irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", sc_id, loc >> 1, loc & 1, irqs_disabled(), in_interrupt(), local_softirq_pending());
+	if (type >= DETER_SOCK_ID_BASE){
+		sc_id = (type - DETER_SOCK_ID_BASE) & 0x0fffffff;
+		loc = (type - DETER_SOCK_ID_BASE) >> 28;
+		deter_log("Before lock: sockcall %u (%u %u); irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", sc_id, loc >> 1, loc & 1, irqs_disabled(), in_interrupt(), local_softirq_pending());
 	}else 
-		derand_log("Before lock: event type %u; irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", type, irqs_disabled(), in_interrupt(), local_softirq_pending());
+		deter_log("Before lock: event type %u; irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", type, irqs_disabled(), in_interrupt(), local_softirq_pending());
 
 	if (atomic_read_u32(&evtq->h) >= evtq->t){
-		derand_log("Error: more events than recorded\n");
+		deter_log("Error: more events than recorded\n");
 		return;
 	}
 	// wait until the next event is this event acquiring lock
@@ -392,42 +392,42 @@ static inline void wait_before_lock(struct sock *sk, u32 type){
 	//       second comparison, we read the new evtq->h.
 	for (evtq_h = atomic_read_u32(&evtq->h); replay_ops.state == STARTED && !(atomic_read_u32(seq) == evtq->v[get_event_q_idx(evtq_h)].seq && evtq->v[get_event_q_idx(evtq_h)].type == type); evtq_h = atomic_read_u32(&evtq->h)){
 		// if this is in __release_sock, bh is disabled. We cannot busy wait here because it prevents softirq accepting new packets (NET_RX), which we are waiting for, causing deadlock!
-		if (type >= DERAND_SOCK_ID_BASE && in_softirq())
+		if (type >= DETER_SOCK_ID_BASE && in_softirq())
 			cond_resched_softirq();
-		#if DERAND_DEBUG
+		#if DETER_DEBUG
 		{
 			u32 evtq_type = evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].type;
-			if (atomic_read_u32(seq) == evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq && evtq_type >= DERAND_SOCK_ID_BASE && type >= DERAND_SOCK_ID_BASE && evtq_type == type){
+			if (atomic_read_u32(seq) == evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq && evtq_type >= DETER_SOCK_ID_BASE && type >= DETER_SOCK_ID_BASE && evtq_type == type){
 				static int first = 0;
 				if (first < 128){
-					u32 evtq_sc_id = (evtq_type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
-					u32 evtq_loc = (evtq_type - DERAND_SOCK_ID_BASE) >> 28;
+					u32 evtq_sc_id = (evtq_type - DETER_SOCK_ID_BASE) & 0x0fffffff;
+					u32 evtq_loc = (evtq_type - DETER_SOCK_ID_BASE) >> 28;
 					first++;
 					if (first > 8)
-						derand_log("Error: current sockcall %u (%u %u) != expected sockcall $%u (%u %u)\n", sc_id, loc >> 1, loc & 1, evtq_sc_id, evtq_loc >> 1, evtq_loc & 1);
+						deter_log("Error: current sockcall %u (%u %u) != expected sockcall $%u (%u %u)\n", sc_id, loc >> 1, loc & 1, evtq_sc_id, evtq_loc >> 1, evtq_loc & 1);
 				}
 			}
 		}
 		#endif
-		#if DERAND_DEBUG
+		#if DETER_DEBUG
 		if (!(cnt & 0xfffffff)){
 			volatile u32 *q_h = &pkt_q.h, *q_t = &pkt_q.t;
-			derand_log("long wait [%u %u]: pkt_q: %u %u; irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", atomic_read_u32(seq), evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq, *q_h, *q_t, irqs_disabled(), in_interrupt(), local_softirq_pending());
+			deter_log("long wait [%u %u]: pkt_q: %u %u; irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", atomic_read_u32(seq), evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq, *q_h, *q_t, irqs_disabled(), in_interrupt(), local_softirq_pending());
 		}
 		cnt++;
 		#endif
 	}
 
-	if (type >= DERAND_SOCK_ID_BASE){
-		u32 sc_id = (type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
-		u32 loc = (type - DERAND_SOCK_ID_BASE) >> 28;
-		derand_log("finish wait lock: seq (%u %u) sockcall %u (%u %u)\n", atomic_read_u32(seq), evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq, sc_id, loc >> 1, loc & 1);
+	if (type >= DETER_SOCK_ID_BASE){
+		u32 sc_id = (type - DETER_SOCK_ID_BASE) & 0x0fffffff;
+		u32 loc = (type - DETER_SOCK_ID_BASE) >> 28;
+		deter_log("finish wait lock: seq (%u %u) sockcall %u (%u %u)\n", atomic_read_u32(seq), evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq, sc_id, loc >> 1, loc & 1);
 	}else 
-		derand_log("finish wait lock: seq (%u %u) event type %u\n", atomic_read_u32(seq), evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq, type);
+		deter_log("finish wait lock: seq (%u %u) event type %u\n", atomic_read_u32(seq), evtq->v[get_event_q_idx(atomic_read_u32(&evtq->h))].seq, type);
 }
 
 static void sockcall_before_lock(struct sock *sk, u32 sc_id){
-	wait_before_lock(sk, sc_id + DERAND_SOCK_ID_BASE);
+	wait_before_lock(sk, sc_id + DETER_SOCK_ID_BASE);
 }
 
 static void incoming_pkt_before_lock(struct sock *sk){
@@ -441,7 +441,7 @@ static void incoming_pkt_before_lock(struct sock *sk){
 	evtq = &r->evtq;
 	seq = &r->seq;
 
-	derand_log("Before lock: incoming pkt\n");
+	deter_log("Before lock: incoming pkt\n");
 	while (replay_ops.state == STARTED){
 		// wait until either (1) no more other types of events, or (2) the next event is packet
 		// NOTE: evtq->v[get_event_q_idx(evtq->h)].seq must be before *seq
@@ -455,7 +455,7 @@ static void incoming_pkt_before_lock(struct sock *sk){
 		cnt++;
 		if (!cnt){
 			volatile u32 *q_h = &pkt_q.h, *q_t = &pkt_q.t;
-			derand_log("long wait (pkt): pkt_q: %u %u; irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", *q_h, *q_t, irqs_disabled(), in_interrupt(), local_softirq_pending());
+			deter_log("long wait (pkt): pkt_q: %u %u; irqs_disabled:%u in_interrupt:%x local_softirq_pending:%x\n", *q_h, *q_t, irqs_disabled(), in_interrupt(), local_softirq_pending());
 		}
 	}
 }
@@ -533,7 +533,7 @@ static inline void replay_advanced_event(const struct sock *sk, u8 type, u8 loc,
 				}
 			}
 			va_end(vl);
-			derand_log("%s\n", buf);
+			deter_log("%s\n", buf);
 
 		}
 
@@ -548,7 +548,7 @@ static inline void replay_advanced_event(const struct sock *sk, u8 type, u8 loc,
 		// update aeq->i
 		r->aeq.i++;
 	}else
-		derand_log("Mismatch: more ae than recorded. %s %hhu\n", get_ae_name(type, name0), loc);
+		deter_log("Mismatch: more ae than recorded. %s %hhu\n", get_ae_name(type, name0), loc);
 }
 #endif
 static inline void new_event(struct sock *sk, u32 type){
@@ -556,20 +556,20 @@ static inline void new_event(struct sock *sk, u32 type){
 	if (!r)
 		return;
 
-	if (type >= DERAND_SOCK_ID_BASE){
-		u32 sc_id = (type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
-		u32 loc = (type - DERAND_SOCK_ID_BASE) >> 28;
-		derand_log("After lock: sockcall %u (%u %u)\n", sc_id, loc >> 1, loc & 1);
+	if (type >= DETER_SOCK_ID_BASE){
+		u32 sc_id = (type - DETER_SOCK_ID_BASE) & 0x0fffffff;
+		u32 loc = (type - DETER_SOCK_ID_BASE) >> 28;
+		deter_log("After lock: sockcall %u (%u %u)\n", sc_id, loc >> 1, loc & 1);
 	}else 
-		derand_log("After lock: event type %u\n", type);
+		deter_log("After lock: event type %u\n", type);
 
-	#if DERAND_DEBUG
+	#if DETER_DEBUG
 	// check dbg_data
-	if (type >= DERAND_SOCK_ID_BASE){
+	if (type >= DETER_SOCK_ID_BASE){
 		if (atomic_read_u32(&r->evtq.h) < r->evtq.t){
 			u32 ori = r->evtq.v[get_event_q_idx(atomic_read_u32(&r->evtq.h))].dbg_data, rep = tcp_sk(sk)->write_seq;
 			if (ori != rep)
-				derand_log("Mismatch: write_seq %u != %u\n", ori, rep);
+				deter_log("Mismatch: write_seq %u != %u\n", ori, rep);
 		}
 	}
 	#endif
@@ -584,14 +584,14 @@ static inline void new_event(struct sock *sk, u32 type){
 }
 
 static void sockcall_lock(struct sock *sk, u32 sc_id){
-	new_event(sk, sc_id + DERAND_SOCK_ID_BASE);
+	new_event(sk, sc_id + DETER_SOCK_ID_BASE);
 }
 
 static void incoming_pkt(struct sock *sk){
 	struct DeterReplayer *r = (struct DeterReplayer*)sk->replayer;
 	if (!r)
 		return;
-	derand_log("After lock: incoming pkt\n");
+	deter_log("After lock: incoming pkt\n");
 	atomic_inc_u32(&r->seq);
 }
 
@@ -627,7 +627,7 @@ static unsigned long _replay_jiffies(const struct sock *sk, int id){
 	replay_advanced_event(sk, -1, id, 0b0, 1, jfq->h);
 	#endif
 	if (jfq->h >= jfq->t){
-		derand_log("Warning: more jiffies reads then recorded %d\n", id);
+		deter_log("Warning: more jiffies reads then recorded %d\n", id);
 		return jfq->last_jiffies;
 	}
 	if (jfq->h == 0){
@@ -666,7 +666,7 @@ static bool replay_tcp_under_memory_pressure(const struct sock *sk){
 static long replay_sk_memory_allocated(const struct sock *sk){
 	struct memory_allocated_q *maq = &((struct DeterReplayer*)sk->replayer)->maq;
 	if (maq->h >= maq->t){
-		derand_log("Warning: more memory_allocated reads than recorded\n");
+		deter_log("Warning: more memory_allocated reads than recorded\n");
 		return maq->last_v;
 	}
 	#if ADVANCED_EVENT_ENABLE
@@ -688,7 +688,7 @@ static long replay_sk_memory_allocated(const struct sock *sk){
 }
 
 static int replay_sk_socket_allocated_read_positive(struct sock *sk){
-	derand_log("Warning: replay_sk_socket_allocated_read_positive() not implemented\n");
+	deter_log("Warning: replay_sk_socket_allocated_read_positive() not implemented\n");
 	#if ADVANCED_EVENT_ENABLE
 	replay_advanced_event(sk, -4, 0, 0b0, 1, 0);
 	#endif
@@ -698,7 +698,7 @@ static int replay_sk_socket_allocated_read_positive(struct sock *sk){
 static void replay_skb_mstamp_get(struct sock *sk, struct skb_mstamp *cl, int loc){
 	struct mstamp_q *msq = &((struct DeterReplayer*)sk->replayer)->msq;
 	if (msq->h >= msq->t){
-		derand_log("Warning: more skb_mstamp_get than recorded %d\n", loc);
+		deter_log("Warning: more skb_mstamp_get than recorded %d\n", loc);
 		*cl = msq->v[get_mstamp_q_idx(msq->t - 1)];
 		return;
 	}
@@ -717,7 +717,7 @@ static bool replay_effect_bool(const struct sock *sk, int loc){
 		replay_advanced_event(sk, -6, loc, 0b0, 1, ebq->h);
 	#endif
 	if (ebq->h >= ebq->t){
-		derand_log("Warning: more effect_bool %d than recorded\n", loc);
+		deter_log("Warning: more effect_bool %d than recorded\n", loc);
 		idx = get_eb_q_idx(ebq->t - 1);
 	}else{
 		idx = get_eb_q_idx(ebq->h);
@@ -735,7 +735,7 @@ static bool replay_skb_still_in_host_queue(const struct sock *sk, const struct s
 	replay_advanced_event(sk, -7, 0, 0b0, 1, siqq->h);
 	#endif
 	if (siqq->h >= siqq->t){
-		derand_log("Warning: more skb_still_in_host_queue than recorded\n");
+		deter_log("Warning: more skb_still_in_host_queue than recorded\n");
 		ret = false; // usually this is false
 	}else {
 		u32 idx = get_siq_q_idx(siqq->h);
@@ -748,7 +748,7 @@ static bool replay_skb_still_in_host_queue(const struct sock *sk, const struct s
 		return ret;
 	// if false, the skb should not be in the queue. So we should wait until the skb is REALLY not in the queue
 	while (skb_fclone_busy(sk, skb)){
-		derand_log("skb_still_in_host_queue: false => true\n");
+		deter_log("skb_still_in_host_queue: false => true\n");
 		cond_resched_softirq(); // we need to allow bh, because freeing skb is in softirq
 	}
 	return ret;
@@ -760,7 +760,7 @@ static int kernel_log(const struct sock *sk, const char *fmt, ...){
 	if (sk->replayer == NULL)
 		return 0;
 	va_start(args, fmt);
-	ret = derand_log_va(fmt, args);
+	ret = deter_log_va(fmt, args);
 	va_end(args);
 	return ret;
 }
@@ -799,7 +799,7 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 
 	rep = replay_ops.replayer;
 	{
-		derand_log("Received pkt: ipid: %hu seq: %u ack: %u\n", ntohs(iph->id), ntohl(tcph->seq), ntohl(tcph->ack_seq));
+		deter_log("Received pkt: ipid: %hu seq: %u ack: %u\n", ntohs(iph->id), ntohl(tcph->seq), ntohl(tcph->ack_seq));
 	}
 
 	// if this packet ackes our fin, skip. ipid from the other side may not be consecutive after acking our fin
@@ -854,7 +854,7 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 			}
 		}
 		next_ipid = (u16)rep->pkt_idx.last_ipid + rep->ps.gap;
-		derand_log("next_ipid: %hu gap: %hd n_consec: %hu\n", next_ipid, rep->ps.gap, rep->ps.n_consec);
+		deter_log("next_ipid: %hu gap: %hd n_consec: %hu\n", next_ipid, rep->ps.gap, rep->ps.n_consec);
 
 		if (skb){ // check the incoming pkt
 			if (ipid == next_ipid){
@@ -916,7 +916,7 @@ int setup_packet_corrector(void){
 	pkt_q.h = pkt_q.t = 0;
 	memset(pkt_reorder_buf, 0, sizeof(pkt_reorder_buf));
 	if (nf_register_hook(&pc_nf_hook_ops)){
-		derand_log("Cannot register packet corrector's netfilter hook\n");
+		deter_log("Cannot register packet corrector's netfilter hook\n");
 		return -1;
 	}
 	return 0;
@@ -1014,10 +1014,8 @@ static void initialize_replay(struct DeterReplayer *r){
 	r->msq.h= 0;
 
 	// initialize ebq
-	for (i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
+	for (i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++)
 		r->ebq[i].h = 0;
-
-	//derand_log("%u %u %u %u %u\n", r->evtq.t, r->jfq.t, r->mpq.t, r->maq.t, r->msq.t);
 }
 
 static void finish_sock(struct sock *sk){
@@ -1044,7 +1042,7 @@ int replay_ops_start(struct DeterReplayer *addr){
 	if (bind_replay_ops())
 		return -1;
 
-	derand_log("create kthread\n");
+	deter_log("create kthread\n");
 	// start the kthread
 	replay_task = kthread_run(replay_kthread, NULL, "replay_kthread");
 
@@ -1055,11 +1053,11 @@ void replay_ops_stop(void){
 	if (replay_ops.state <= STARTED)
 		replay_ops.state = SHOULD_STOP;
 
-	derand_log("unbind_replay_ops\n");
+	deter_log("unbind_replay_ops\n");
 	unbind_replay_ops();
 
 	// wait for stop kthread to stop
-	derand_log("wait for kthread to stop\n");
+	deter_log("wait for kthread to stop\n");
 	while (replay_ops.state != STOPPED);
 
 	// print some stats
@@ -1067,5 +1065,5 @@ void replay_ops_stop(void){
 
 	// clean remaining packets in the queue
 	while (!dequeue(&pkt_q))
-		derand_log("sent a leftover pkt\n");
+		deter_log("sent a leftover pkt\n");
 }

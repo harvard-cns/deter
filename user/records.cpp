@@ -50,10 +50,10 @@ void Records::transform(){
 
 void Records::order_sockcalls(){
 	unordered_map<u32, u32> idx_mapping;
-	vector<derand_rec_sockcall> old_sockcalls = sockcalls;
+	vector<deter_rec_sockcall> old_sockcalls = sockcalls;
 	for (uint64_t i = 0; i < evts.size(); i++){
-		derand_event &e = evts[i];
-		if (e.type >= DERAND_SOCK_ID_BASE){
+		deter_event &e = evts[i];
+		if (e.type >= DETER_SOCK_ID_BASE){
 			u32 idx = get_sockcall_idx(e.type);
 			if (idx_mapping.find(idx) == idx_mapping.end()){
 				u32 new_idx = idx_mapping.size();
@@ -63,10 +63,10 @@ void Records::order_sockcalls(){
 		}
 	}
 	for (uint64_t i = 0; i < evts.size(); i++){
-		derand_event &e = evts[i];
-		if (e.type >= DERAND_SOCK_ID_BASE){
+		deter_event &e = evts[i];
+		if (e.type >= DETER_SOCK_ID_BASE){
 			u32 idx = get_sockcall_idx(e.type);
-			e.type = (e.type & ~SC_ID_MASK) | (idx_mapping[idx] + DERAND_SOCK_ID_BASE);
+			e.type = (e.type & ~SC_ID_MASK) | (idx_mapping[idx] + DETER_SOCK_ID_BASE);
 		}
 	}
 }
@@ -156,7 +156,7 @@ int Records::dump(const char* filename){
 	#endif
 
 	// write effect_bool
-	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
+	for (int i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++)
 		if (!ebq[i].dump(fout))
 			goto fail_write;
 
@@ -247,7 +247,7 @@ int Records::read(const char* filename){
 	#endif
 
 	// read effect_bool
-	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
+	for (int i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++)
 		if (!ebq[i].read(fin))
 			goto fail_read;
 
@@ -279,8 +279,8 @@ uint64_t Records::get_pkt_received(){
 uint64_t Records::get_total_bytes_received(){
 	uint64_t total_bytes = 0;
 	for (int i = 0; i < sockcalls.size(); i++){
-		derand_rec_sockcall &sc = sockcalls[i];
-		if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG)
+		deter_rec_sockcall &sc = sockcalls[i];
+		if (sc.type == DETER_SOCKCALL_TYPE_RECVMSG)
 			total_bytes += sc.recvmsg.size;
 	}
 	return total_bytes;
@@ -289,8 +289,8 @@ uint64_t Records::get_total_bytes_received(){
 uint64_t Records::get_total_bytes_sent(){
 	uint64_t total_bytes = 0;
 	for (int i = 0; i < sockcalls.size(); i++){
-		derand_rec_sockcall &sc = sockcalls[i];
-		if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG)
+		deter_rec_sockcall &sc = sockcalls[i];
+		if (sc.type == DETER_SOCKCALL_TYPE_SENDMSG)
 			total_bytes += sc.sendmsg.size;
 	}
 	return total_bytes;
@@ -408,17 +408,17 @@ void Records::print_meta(FILE *fout){
 void Records::print(FILE* fout){
 	fprintf(fout, "%lu sockcalls\n", sockcalls.size());
 	for (int i = 0; i < sockcalls.size(); i++){
-		derand_rec_sockcall &sc = sockcalls[i];
+		deter_rec_sockcall &sc = sockcalls[i];
 		fprintf(fout, "%d ", i);
-		if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG){
+		if (sc.type == DETER_SOCKCALL_TYPE_SENDMSG){
 			fprintf(fout, "sendmsg: 0x%x %lu thread %lu", sc.sendmsg.flags, sc.sendmsg.size, sc.thread_id);
-		}else if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG){
+		}else if (sc.type == DETER_SOCKCALL_TYPE_RECVMSG){
 			fprintf(fout, "recvmsg: 0x%x %lu thread %lu", sc.recvmsg.flags, sc.recvmsg.size, sc.thread_id);
-		}else if (sc.type == DERAND_SOCKCALL_TYPE_CLOSE){
+		}else if (sc.type == DETER_SOCKCALL_TYPE_CLOSE){
 			fprintf(fout, "close: %ld thread %lu", sc.close.timeout, sc.thread_id);
-		}else if (sc.type == DERAND_SOCKCALL_TYPE_SPLICE_READ){
+		}else if (sc.type == DETER_SOCKCALL_TYPE_SPLICE_READ){
 			fprintf(fout, "splice_read: 0x%x %lu thread %lu", sc.splice_read.flags, sc.splice_read.size, sc.thread_id);
-		}else if (sc.type == DERAND_SOCKCALL_TYPE_SETSOCKOPT){
+		}else if (sc.type == DETER_SOCKCALL_TYPE_SETSOCKOPT){
 			if (valid_rec_setsockopt(&sc.setsockopt)){
 				fprintf(fout, "setsockopt: %hhu %hhu %hhu ", sc.setsockopt.level, sc.setsockopt.optname, sc.setsockopt.optlen);
 				for (int j = 0; j < sc.setsockopt.optlen; j++)
@@ -431,10 +431,10 @@ void Records::print(FILE* fout){
 	}
 	fprintf(fout, "%lu events\n", evts.size());
 	for (int i = 0; i < evts.size(); i++){
-		derand_event &e = evts[i];
+		deter_event &e = evts[i];
 		char buf[32];
 		fprintf(fout, "%u %s", e.seq, get_event_name(e.type, buf));
-		if (e.type >= DERAND_SOCK_ID_BASE)
+		if (e.type >= DETER_SOCK_ID_BASE)
 			fprintf(fout, " %s", get_sockcall_str(&sockcalls[get_sockcall_idx(e.type)], buf));
 
 		fprintf(fout, "\n");
@@ -494,7 +494,7 @@ void Records::print(FILE* fout){
 		fprintf(fout, "%u %u\n", tsq[i], (tsq[i] - (i?tsq[i-1]:0)) / 1000);
 	#endif
 
-	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
+	for (int i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++){
 		auto &eb = ebq[i];
 		fprintf(fout, "effect_bool %d: %u reads %lu\n", i, eb.n, eb.v.size());
 		for (int j = 0; j < eb.v.size(); j++){
@@ -668,24 +668,24 @@ void Records::clear(){
 	#if COLLECT_TX_STAMP
 	tsq.clear();
 	#endif
-	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++)
+	for (int i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++)
 		ebq[i].clear();
 	#if ADVANCED_EVENT_ENABLE
 	aeq.clear();
 	#endif
 }
 
-string get_sockcall_key(derand_rec_sockcall &sc){
+string get_sockcall_key(deter_rec_sockcall &sc){
 	char res[128];
-	if (sc.type == DERAND_SOCKCALL_TYPE_CLOSE){
+	if (sc.type == DETER_SOCKCALL_TYPE_CLOSE){
 		sprintf(res, "%u,%lu", sc.type, sc.close.timeout);
-	}else if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG){
+	}else if (sc.type == DETER_SOCKCALL_TYPE_SENDMSG){
 		sprintf(res, "%u,%u,%lu", sc.type, sc.sendmsg.flags, sc.sendmsg.size);
-	}else if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG){
+	}else if (sc.type == DETER_SOCKCALL_TYPE_RECVMSG){
 		sprintf(res, "%u,%u,%lu", sc.type, sc.recvmsg.flags, sc.recvmsg.size);
-	}else if (sc.type == DERAND_SOCKCALL_TYPE_SPLICE_READ){
+	}else if (sc.type == DETER_SOCKCALL_TYPE_SPLICE_READ){
 		sprintf(res, "%u,%u,%lu", sc.type, sc.splice_read.flags, sc.splice_read.size);
-	}else if (sc.type == DERAND_SOCKCALL_TYPE_SETSOCKOPT){
+	}else if (sc.type == DETER_SOCKCALL_TYPE_SETSOCKOPT){
 		int posn;
 		char *buf = res;
 		sprintf(buf, "%u,%u,%u,%u%n", sc.type, sc.setsockopt.level, sc.setsockopt.optname, sc.setsockopt.optlen, &posn);
@@ -715,10 +715,10 @@ void Records::print_raw_storage_size(){
 	uint64_t size = 0;
 	size += sizeof(init_data);
 	printf("init_data: %lu\n", sizeof(init_data));
-	size += sizeof(derand_event) * evts.size();
-	printf("evts: %lu\n", sizeof(derand_event) * evts.size());
-	size += sizeof(derand_rec_sockcall) * sockcalls.size();
-	printf("sockcalls: %lu\n", sizeof(derand_rec_sockcall) * sockcalls.size());
+	size += sizeof(deter_event) * evts.size();
+	printf("evts: %lu\n", sizeof(deter_event) * evts.size());
+	size += sizeof(deter_rec_sockcall) * sockcalls.size();
+	printf("sockcalls: %lu\n", sizeof(deter_rec_sockcall) * sockcalls.size());
 	//size += sizeof(uint32_t) * dpq.size();
 	//printf("dpq: %lu\n", sizeof(uint32_t) * dpq.size());
 	size += sizeof(jiffies_rec) * jiffies.size();
@@ -733,7 +733,7 @@ void Records::print_raw_storage_size(){
 	printf("siqq: %lu\n", sizeof(uint8_t) * siqq.size());
 	size += siq.raw_storage_size();
 	printf("siq: %lu\n", siq.raw_storage_size());
-	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
+	for (int i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++){
 		size += ebq[i].raw_storage_size();
 		printf("ebq[%d]: %lu\n", i, ebq[i].raw_storage_size());
 	}
@@ -800,8 +800,8 @@ uint64_t Records::compressed_sockcall_size(){
 	// assign a unique id to each unique flag
 	map<int,int> flag_id;
 	for (int i = 0; i < sockcalls.size(); i++){
-		if (sockcalls[i].type != DERAND_SOCKCALL_TYPE_CLOSE 
-				&& sockcalls[i].type != DERAND_SOCKCALL_TYPE_SETSOCKOPT
+		if (sockcalls[i].type != DETER_SOCKCALL_TYPE_CLOSE 
+				&& sockcalls[i].type != DETER_SOCKCALL_TYPE_SETSOCKOPT
 				&& flag_id.find(sockcalls[i].sendmsg.flags) == flag_id.end()){
 			uint64_t id = flag_id.size();
 			flag_id[sockcalls[i].sendmsg.flags] = id;
@@ -916,7 +916,7 @@ uint64_t Records::compressed_mstamp_size(){
 	return this_size;
 }
 
-derand_rec_sockcall* Records::evt_get_sc(derand_event *evt){
+deter_rec_sockcall* Records::evt_get_sc(deter_event *evt){
 	return &sockcalls[get_sockcall_idx(evt->type)];
 }
 
@@ -972,7 +972,7 @@ void Records::print_compressed_storage_size(){
 		size += sz;
 		printf("siq: %lu\n", sz);
 	}
-	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
+	for (int i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++){
 		uint64_t sz = ebq[i].compressed_storage_size();
 		size += sz;
 		printf("ebq[%d]: %lu\n", i, sz);

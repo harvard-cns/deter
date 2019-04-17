@@ -68,7 +68,7 @@ static void __exit record_exit(void)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Yuliang Li");
-MODULE_DESCRIPTION("derand recorder");
+MODULE_DESCRIPTION("deter recorder");
 
 module_init(record_init);
 module_exit(record_exit);

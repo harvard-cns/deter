@@ -10,8 +10,8 @@ struct replay_ctrl replay_ctrl = {
 	.replay_started = false,
 };
 
-// struct name: proc_derand_replay_expose
-INIT_PROC_EXPOSE(derand_replay)
+// struct name: proc_deter_replay_expose
+INIT_PROC_EXPOSE(deter_replay)
 
 /********************************************
  * start of replay:
@@ -49,42 +49,42 @@ static int user_copy_finish(void *args, char* buf, size_t len){
 static int user_input_buffer_size(void *args, char* buf, size_t len){
 	int order;
 	if (replay_ctrl.addr != NULL){
-		derand_log("Warning: cannot accept user buffer_size more than once\n");
+		deter_log("Warning: cannot accept user buffer_size more than once\n");
 		return -1;
 	}
 	if (sscanf(buf, "%u", &replay_ctrl.size) == 0){
-		derand_log("Error: user input buffer_size format error\n");
+		deter_log("Error: user input buffer_size format error\n");
 		return -1;
 	}
-	derand_log("buffer size = %u\n", replay_ctrl.size);
+	deter_log("buffer size = %u\n", replay_ctrl.size);
 
 	// allocate memory
 	order = get_page_order(replay_ctrl.size);
 	replay_ctrl.addr = (void*)__get_free_pages(GFP_KERNEL, order);
 	if (!replay_ctrl.addr){
-		derand_log("fail get free pages\n");
+		deter_log("fail get free pages\n");
 		return -1;
 	}
-	derand_log("successfully get %d pages\n", 1 << order);
+	deter_log("successfully get %d pages\n", 1 << order);
 
 	// reserve pages
 	reserve_pages(virt_to_page(replay_ctrl.addr), 1<<order);
 
 	// expose the addr to user
-	proc_derand_replay_expose.output_func = expose_addr;
+	proc_deter_replay_expose.output_func = expose_addr;
 	
 	// set the next input callback for user copy finish
-	proc_derand_replay_expose.input_func = user_copy_finish;
+	proc_deter_replay_expose.input_func = user_copy_finish;
 
 	return 1;
 }
 
 int replay_prepare(void){
 	int ret;
-	proc_derand_replay_expose.input_func = user_input_buffer_size;
-	ret = proc_expose_start(&proc_derand_replay_expose);
+	proc_deter_replay_expose.input_func = user_input_buffer_size;
+	ret = proc_expose_start(&proc_deter_replay_expose);
 	if (ret){
-		derand_log("replay_prepare: Fail to open proc file\n");
+		deter_log("replay_prepare: Fail to open proc file\n");
 		return -1;
 	}
 	return 0;
@@ -103,7 +103,7 @@ void replay_stop(void){
 	}
 
 	// close proc file
-	proc_expose_stop(&proc_derand_replay_expose);
+	proc_expose_stop(&proc_deter_replay_expose);
 
 	// reclaim memory
 	if (replay_ctrl.addr){ 

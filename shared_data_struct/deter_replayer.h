@@ -7,7 +7,7 @@
 #define EVENT_Q_LEN 32768
 struct event_q{
 	u32 h, t;
-	struct derand_event v[EVENT_Q_LEN];
+	struct deter_event v[EVENT_Q_LEN];
 };
 #define get_event_q_idx(i) ((i) & (EVENT_Q_LEN - 1))
 

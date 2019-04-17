@@ -22,7 +22,7 @@ int Replayer::convert_event(){
 	d->evtq.h = 0;
 	d->evtq.t = size;
 	if (size > 0)
-		memcpy(d->evtq.v, &s[0], sizeof(derand_event) * size);
+		memcpy(d->evtq.v, &s[0], sizeof(deter_event) * size);
 	return 0;
 }
 
@@ -109,7 +109,7 @@ int Replayer::convert_siq(){
 }
 
 int Replayer::convert_effect_bool(){
-	for (int i = 0; i < DERAND_EFFECT_BOOL_N_LOC; i++){
+	for (int i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++){
 		auto &s = rec.ebq[i];
 		if (s.n > EFFECT_BOOL_Q_LEN){
 			fprintf(stderr, "too many effect_bool %d: %u > %u\n", i, s.n, EFFECT_BOOL_Q_LEN);
@@ -232,16 +232,16 @@ int Replayer::start_replay_client(const string &dip){
 	return 0;
 }
 
-void do_sockcall(int sockfd, derand_rec_sockcall sc, int id){
-	if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG){
+void do_sockcall(int sockfd, deter_rec_sockcall sc, int id){
+	if (sc.type == DETER_SOCKCALL_TYPE_SENDMSG){
 		vector<uint8_t> buf(sc.sendmsg.size);
 		send(sockfd, &buf[0], sc.sendmsg.size, sc.sendmsg.flags);
-	} else if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG){
+	} else if (sc.type == DETER_SOCKCALL_TYPE_RECVMSG){
 		vector<uint8_t> buf(sc.recvmsg.size);
 		recv(sockfd, &buf[0], sc.recvmsg.size, sc.recvmsg.flags);
-	} else if (sc.type == DERAND_SOCKCALL_TYPE_CLOSE){
+	} else if (sc.type == DETER_SOCKCALL_TYPE_CLOSE){
 		close(sockfd);
-	} else if (sc.type == DERAND_SOCKCALL_TYPE_SETSOCKOPT){
+	} else if (sc.type == DETER_SOCKCALL_TYPE_SETSOCKOPT){
 		setsockopt(sockfd, sc.setsockopt.level, sc.setsockopt.optname, sc.setsockopt.optval, sc.setsockopt.optlen);
 	}
 	printf("sockcall %d finishes\n", id);
@@ -293,7 +293,7 @@ void Replayer::start_replay(){
 			printf("Error: more sockcall than recorded\n");
 
 		// wait until next event is sockcall lock, and the sockcall id matches
-		while (!(seq == d->evtq.v[get_event_q_idx(h)].seq && d->evtq.v[get_event_q_idx(h)].type == i + DERAND_SOCK_ID_BASE));
+		while (!(seq == d->evtq.v[get_event_q_idx(h)].seq && d->evtq.v[get_event_q_idx(h)].type == i + DETER_SOCK_ID_BASE));
 
 		// issue the socket call
 		thread_pool.push_back(thread(sockcall_thread, sockfd, rec.sockcalls[i], i));

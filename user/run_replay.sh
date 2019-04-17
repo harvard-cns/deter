@@ -7,7 +7,7 @@ else
 	sleep 1
 
 	cd ../kmod
-	sudo insmod derand_replayer.ko
+	sudo insmod deter_replayer.ko
 
 	cd ../user
 	sudo ./logger > log.txt &

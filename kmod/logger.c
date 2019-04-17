@@ -2,8 +2,8 @@
 #include "mem_util.h"
 #include "proc_expose.h"
 
-// struct name: proc_derand_logger_expose
-INIT_PROC_EXPOSE(derand_logger)
+// struct name: proc_deter_logger_expose
+INIT_PROC_EXPOSE(deter_logger)
 
 struct Logger *logger = NULL;
 spinlock_t logger_lock = __SPIN_LOCK_UNLOCKED();
@@ -22,7 +22,7 @@ int init_logger(void){
 	if (logger){
 		reserve_pages(virt_to_page(logger), 1<<order);
 	}else {
-		printk("[DERAND] Fail to allocate memory for logger\n");
+		printk("[DETER] Fail to allocate memory for logger\n");
 		spin_unlock(&logger_lock);
 		return -1;
 	}
@@ -36,10 +36,10 @@ int init_logger(void){
 	spin_unlock(&logger_lock);
 
 	// expose through proc
-	proc_derand_logger_expose.output_func = expose_addr;
-	ret = proc_expose_start(&proc_derand_logger_expose);
+	proc_deter_logger_expose.output_func = expose_addr;
+	ret = proc_expose_start(&proc_deter_logger_expose);
 	if (ret){
-		printk("[DERAND] Fail to open proc file for logger\n");
+		printk("[DETER] Fail to open proc file for logger\n");
 		return -1;
 	}
 	return 0;
@@ -47,7 +47,7 @@ int init_logger(void){
 
 void clear_logger(void){
 	int order;
-	proc_expose_stop(&proc_derand_logger_expose);
+	proc_expose_stop(&proc_deter_logger_expose);
 
 	spin_lock(&logger_lock);
 	logger->running = 0;
@@ -58,7 +58,7 @@ void clear_logger(void){
 	spin_unlock(&logger_lock);
 }
 
-int derand_log_va(const char *fmt, va_list args){
+int deter_log_va(const char *fmt, va_list args){
 	int ret = 0;
 	u32 idx;
 	//spin_lock(&logger_lock);
@@ -79,11 +79,11 @@ int derand_log_va(const char *fmt, va_list args){
 	//spin_unlock(&logger_lock);
 	return ret;
 }
-int derand_log(const char *fmt, ...){
+int deter_log(const char *fmt, ...){
 	int ret = 0;
 	va_list args;
 	va_start(args, fmt);
-	ret = derand_log_va(fmt, args);
+	ret = deter_log_va(fmt, args);
 	va_end(args);
 	return ret;
 }

@@ -63,9 +63,9 @@ int main(int argc, char **argv){
 		dip = argv[2];
 
 	// setup shared memory
-	send_buffer_size("derand_replay");
+	send_buffer_size("deter_replay");
 	KernelMem kmem;
-	if (kmem.map_proc_exposed_mem("derand_replay", sizeof(DeterReplayer)))
+	if (kmem.map_proc_exposed_mem("deter_replay", sizeof(DeterReplayer)))
 		return -1;
 
 	// make replayer
@@ -81,7 +81,7 @@ int main(int argc, char **argv){
 	}
 
 	// tell kernel copy finish
-	send_copy_finish("derand_replay");
+	send_copy_finish("deter_replay");
 
 	// start replay
 	if (r.rec.mode == 0){

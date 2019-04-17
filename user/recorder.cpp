@@ -27,16 +27,16 @@ inline uint64_t get_time(){
 	return ts.tv_sec * 1000000000lu + ts.tv_nsec;
 }
 
-void print_sockcall(derand_rec_sockcall &sc){
-	if (sc.type == DERAND_SOCKCALL_TYPE_SENDMSG){
+void print_sockcall(deter_rec_sockcall &sc){
+	if (sc.type == DETER_SOCKCALL_TYPE_SENDMSG){
 		fprintf(stdout, "sendmsg: 0x%x %lu thread %lu", sc.sendmsg.flags, sc.sendmsg.size, sc.thread_id);
-	}else if (sc.type == DERAND_SOCKCALL_TYPE_RECVMSG){
+	}else if (sc.type == DETER_SOCKCALL_TYPE_RECVMSG){
 		fprintf(stdout, "recvmsg: 0x%x %lu thread %lu", sc.recvmsg.flags, sc.recvmsg.size, sc.thread_id);
-	}else if (sc.type == DERAND_SOCKCALL_TYPE_CLOSE){
+	}else if (sc.type == DETER_SOCKCALL_TYPE_CLOSE){
 		fprintf(stdout, "close: %ld thread %lu", sc.close.timeout, sc.thread_id);
-	}else if (sc.type == DERAND_SOCKCALL_TYPE_SPLICE_READ){
+	}else if (sc.type == DETER_SOCKCALL_TYPE_SPLICE_READ){
 		fprintf(stdout, "splice_read: 0x%x %lu thread %lu", sc.splice_read.flags, sc.splice_read.size, sc.thread_id);
-	}else if (sc.type == DERAND_SOCKCALL_TYPE_SETSOCKOPT){
+	}else if (sc.type == DETER_SOCKCALL_TYPE_SETSOCKOPT){
 		if (valid_rec_setsockopt(&sc.setsockopt)){
 			fprintf(stdout, "setsockopt: %hhu %hhu %hhu ", sc.setsockopt.level, sc.setsockopt.optname, sc.setsockopt.optlen);
 			for (int j = 0; j < sc.setsockopt.optlen; j++)
@@ -49,7 +49,7 @@ void print_sockcall(derand_rec_sockcall &sc){
 	}
 	fprintf(stdout, "\n");
 }
-bool compare_sockcall(derand_rec_sockcall &sc1, derand_rec_sockcall &sc2){
+bool compare_sockcall(deter_rec_sockcall &sc1, deter_rec_sockcall &sc2){
 	if (sc1.type != sc2.type)
 		return false;
 	if (sc1.type == DETER_SOCKCALL_TYPE_SENDMSG){
@@ -211,10 +211,10 @@ void* recorder_func(void *args){
 
 		// copy data
 		if (mb->type == DETER_MEM_BLOCK_TYPE_EVT){
-			derand_event *data = (derand_event*)mb->data;
+			deter_event *data = (deter_event*)mb->data;
 			r.evts.insert(r.evts.end(), data, data + mb->len);
 		}else if (mb->type == DETER_MEM_BLOCK_TYPE_SOCKCALL){
-			derand_rec_sockcall *data = (derand_rec_sockcall*)mb->data;
+			deter_rec_sockcall *data = (deter_rec_sockcall*)mb->data;
 			r.sockcalls.insert(r.sockcalls.end(), data, data + mb->len);
 		}else if (mb->type == DETER_MEM_BLOCK_TYPE_PS){
 			uint16_t *data = (uint16_t*)mb->data;

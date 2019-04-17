@@ -53,7 +53,7 @@ if [ $do_tcpdump -eq 1 ]; then
 fi
 
 cd ../kmod
-sudo insmod derand_recorder.ko dstip=$dstip_int ndstip=$ndstip_int
+sudo insmod deter_recorder.ko dstip=$dstip_int ndstip=$ndstip_int
 
 cd ../user
 sudo ./recorder

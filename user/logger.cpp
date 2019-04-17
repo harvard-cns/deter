@@ -8,7 +8,7 @@
 
 using namespace std;
 
-#define LOGGER_PROC_NAME "derand_logger"
+#define LOGGER_PROC_NAME "deter_logger"
 
 vector<string> logs;
 

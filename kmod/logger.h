@@ -10,7 +10,7 @@ extern spinlock_t logger_lock;
 
 int init_logger(void);
 void clear_logger(void);
-int derand_log_va(const char *fmt, va_list args);
-int derand_log(const char *fmt, ...);
+int deter_log_va(const char *fmt, va_list args);
+int deter_log(const char *fmt, ...);
 
 #endif /* _KMOD__LOGGER_H */

@@ -3,8 +3,8 @@
 
 #include "deter_recorder.h"
 
-/* This is the memory pool for all derand data. 
- * addr is by default NULL, and initalized by derand kernel module */
+/* This is the memory pool for all deter data. 
+ * addr is by default NULL, and initalized by deter kernel module */
 struct record_shmem{
 	struct SharedMemLayout *addr;
 };

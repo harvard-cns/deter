@@ -26,7 +26,7 @@ static void __exit replay_exit(void)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Yuliang Li");
-MODULE_DESCRIPTION("derand replayer");
+MODULE_DESCRIPTION("deter replayer");
 
 module_init(replay_init);
 module_exit(replay_exit);

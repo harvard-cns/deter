@@ -3,79 +3,74 @@
 
 #include "tcp_sock_init_data.h"
 
-#define DERAND_DEBUG 0
+#define DETER_DEBUG 0
 #define ADVANCED_EVENT_ENABLE 0
 #define COLLECT_TX_STAMP 1
 
 /* Different types of socket calls' ID starts with different highest 4 bits */
-#define DERAND_SOCK_ID_BASE 100
+#define DETER_SOCK_ID_BASE 100
 
 #define DETER_SOCKCALL_TYPE_SENDMSG 0
-#define DERAND_SOCKCALL_TYPE_SENDMSG DETER_SOCKCALL_TYPE_SENDMSG
-struct derand_rec_sockcall_tcp_sendmsg{
+struct deter_rec_sockcall_tcp_sendmsg{
 	u8 type;
 	int flags; // msg.msg_flags
 	size_t size;
 };
 #define DETER_SOCKCALL_TYPE_RECVMSG 1
-#define DERAND_SOCKCALL_TYPE_RECVMSG DETER_SOCKCALL_TYPE_RECVMSG
-struct derand_rec_sockcall_tcp_recvmsg{
+struct deter_rec_sockcall_tcp_recvmsg{
 	u8 type;
 	int flags; // nonblock | flags
 	size_t size;
 };
 #define DETER_SOCKCALL_TYPE_CLOSE 2
-#define DERAND_SOCKCALL_TYPE_CLOSE DETER_SOCKCALL_TYPE_CLOSE
-struct derand_rec_sockcall_tcp_close{
+struct deter_rec_sockcall_tcp_close{
 	u8 type;
 	long timeout;
 };
 #define DETER_SOCKCALL_TYPE_SPLICE_READ 3
-#define DERAND_SOCKCALL_TYPE_SPLICE_READ DETER_SOCKCALL_TYPE_SPLICE_READ
-struct derand_rec_sockcall_tcp_splice_read{
+struct deter_rec_sockcall_tcp_splice_read{
 	u8 type;
 	int flags;
 	size_t size;
 };
 #define DETER_SOCKCALL_TYPE_SETSOCKOPT 4
-#define DERAND_SOCKCALL_TYPE_SETSOCKOPT DETER_SOCKCALL_TYPE_SETSOCKOPT
-struct derand_rec_sockcall_setsockopt{
+struct deter_rec_sockcall_setsockopt{
 	u8 type;
 	u8 level;
 	u8 optname;
 	u8 optlen;
 	u8 optval[12];
 };
-static inline bool valid_rec_setsockopt(struct derand_rec_sockcall_setsockopt *sc){
+static inline bool valid_rec_setsockopt(struct deter_rec_sockcall_setsockopt *sc){
 	return sc->level < 255 || sc->optname < 255 || sc->optlen <= 12;
 }
 
-struct derand_rec_sockcall{
+struct deter_rec_sockcall{
 	union{
 		u8 type;
-		struct derand_rec_sockcall_tcp_sendmsg sendmsg;
-		struct derand_rec_sockcall_tcp_recvmsg recvmsg;
-		struct derand_rec_sockcall_tcp_close close;
-		struct derand_rec_sockcall_tcp_splice_read splice_read;
-		struct derand_rec_sockcall_setsockopt setsockopt;
+		struct deter_rec_sockcall_tcp_sendmsg sendmsg;
+		struct deter_rec_sockcall_tcp_recvmsg recvmsg;
+		struct deter_rec_sockcall_tcp_close close;
+		struct deter_rec_sockcall_tcp_splice_read splice_read;
+		struct deter_rec_sockcall_setsockopt setsockopt;
 	};
 	u64 thread_id;
 };
-static inline const char* get_sockcall_str(struct derand_rec_sockcall *sc, char* buf){
+static inline const char* get_sockcall_str(struct deter_rec_sockcall *sc, char* buf){
 	switch (sc->type){
-		case DERAND_SOCKCALL_TYPE_SENDMSG:
+		case DETER_SOCKCALL_TYPE_SENDMSG:
 			sprintf(buf, "sendmsg");
 			break;
-		case DERAND_SOCKCALL_TYPE_RECVMSG:
+		case DETER_SOCKCALL_TYPE_RECVMSG:
 			sprintf(buf, "recvmsg");
 			break;
-		case DERAND_SOCKCALL_TYPE_CLOSE:
+		case DETER_SOCKCALL_TYPE_CLOSE:
 			sprintf(buf, "close");
 			break;
-		case DERAND_SOCKCALL_TYPE_SPLICE_READ:
+		case DETER_SOCKCALL_TYPE_SPLICE_READ:
 			sprintf(buf, "splice_read");
 			break;
-		case DERAND_SOCKCALL_TYPE_SETSOCKOPT:
+		case DETER_SOCKCALL_TYPE_SETSOCKOPT:
 			sprintf(buf, "setsockopt");
 			break;
 		default:
@@ -84,7 +79,7 @@ static inline const char* get_sockcall_str(struct derand_rec_sockcall *sc, char*
 	return buf;
 }
 #define SC_ID_MASK 0x0fffffff
-#define get_sockcall_idx(type) (((type) - DERAND_SOCK_ID_BASE) & SC_ID_MASK)
+#define get_sockcall_idx(type) (((type) - DETER_SOCK_ID_BASE) & SC_ID_MASK)
 
 #define EVENT_TYPE_PACKET 0
 #define EVENT_TYPE_TASKLET 1
@@ -93,12 +88,12 @@ static inline const char* get_sockcall_str(struct derand_rec_sockcall *sc, char*
 #define EVENT_TYPE_KEEPALIVE_TIMEOUT 4
 #define EVENT_TYPE_FINISH 99
 /* struct for each lock acquiring event */
-struct derand_event{
+struct deter_event{
 	u32 seq;
-	u32 type; // 0: pkt; 1: tsq; 2~98: timeout types; 99: finish; 100 ~ inf: socket call IDs + DERAND_SOCK_ID_BASE
+	u32 type; // 0: pkt; 1: tsq; 2~98: timeout types; 99: finish; 100 ~ inf: socket call IDs + DETER_SOCK_ID_BASE
 };
-static inline bool evt_is_sockcall(const struct derand_event* e){
-	return e->type >= DERAND_SOCK_ID_BASE;
+static inline bool evt_is_sockcall(const struct deter_event* e){
+	return e->type >= DETER_SOCK_ID_BASE;
 }
 static inline char* get_event_name(u32 type, char* buf){
 	uint32_t idx, loc;
@@ -122,8 +117,8 @@ static inline char* get_event_name(u32 type, char* buf){
 			sprintf(buf, "finish");
 			break;
 		default:
-			idx = (type - DERAND_SOCK_ID_BASE) & 0x0fffffff;
-			loc = (type - DERAND_SOCK_ID_BASE) >> 28;
+			idx = (type - DETER_SOCK_ID_BASE) & 0x0fffffff;
+			loc = (type - DETER_SOCK_ID_BASE) >> 28;
 			sprintf(buf, "sockcall %u (%u %u)", idx, loc>>1, loc&1);
 	}
 	return buf;
@@ -170,11 +165,10 @@ union memory_allocated_rec{
 };
 
 #define DETER_EFFECT_BOOL_N_LOC 17
-#define DERAND_EFFECT_BOOL_N_LOC DETER_EFFECT_BOOL_N_LOC
 
 /* struct general event (for debug): including locking and reading */
 struct GeneralEvent{
-	u32 type; // 0: evtq; 1: jfq; 2: mpq; 3: maq; 4: saq; 5: msq; 6 ~ 6+DERAND_EFFECT_BOOL_N_LOC-1: ebq
+	u32 type; // 0: evtq; 1: jfq; 2: mpq; 3: maq; 4: saq; 5: msq; 6 ~ 6+DETER_EFFECT_BOOL_N_LOC-1: ebq
 	u32 data[2];
 };
 static inline const char* get_ge_name(u32 type, char* buf){

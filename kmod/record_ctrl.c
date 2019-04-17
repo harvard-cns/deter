@@ -9,7 +9,7 @@ int create_record_ctrl(void){
 
 	// find the right number of pages 
 	int order = get_page_order(sizeof(struct SharedMemLayout));
-	printk("[DERAND] need %lu Bytes, allocat %lu Bytes\n", (sizeof(struct SharedMemLayout)), (1<<order) * 4096lu);
+	printk("[DETER] need %lu Bytes, allocat %lu Bytes\n", (sizeof(struct SharedMemLayout)), (1<<order) * 4096lu);
 
 	// allocate and reserve pages
 	shmem.addr = (struct SharedMemLayout*)__get_free_pages(GFP_KERNEL, order);
@@ -41,7 +41,7 @@ int create_record_ctrl(void){
 	return 0;
 
 fail_addr:
-	printk("[DERAND] create_record_ctrl(): Fail to allocate shmem.addr\n");
+	printk("[DETER] create_record_ctrl(): Fail to allocate shmem.addr\n");
 	return -1;
 }
 

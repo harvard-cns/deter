@@ -259,7 +259,7 @@ static inline void new_event(struct sock *sk, u32 type){
 	u32 seq;
 	union{
 		u64 u;
-		struct derand_event e;
+		struct deter_event e;
 	}dt;
 	if (!rec)
 		return;
@@ -340,7 +340,7 @@ static void recorder_destruct(struct sock *sk){
 /******************************************
  * sockcall
  *****************************************/
-static inline void put_sockcall(struct DeterRecorder *rec, int sc_id, struct derand_rec_sockcall* sc){
+static inline void put_sockcall(struct DeterRecorder *rec, int sc_id, struct deter_rec_sockcall* sc){
 	if (atomic_read(&rec->sockcall_id_mp) != sc_id){
 		u32 cnt = 0;
 		for (;atomic_read(&rec->sockcall_id_mp) != sc_id; cnt++){
@@ -348,13 +348,13 @@ static inline void put_sockcall(struct DeterRecorder *rec, int sc_id, struct der
 				printk("long wait for sockcall_id_mp: %d sc_id %d\n", atomic_read(&rec->sockcall_id_mp), sc_id);
 		}
 	}
-	push_nbyte(rec, &rec->sockcall.mb, DETER_MEM_BLOCK_TYPE_SOCKCALL, sizeof(struct derand_rec_sockcall), sc);
+	push_nbyte(rec, &rec->sockcall.mb, DETER_MEM_BLOCK_TYPE_SOCKCALL, sizeof(struct deter_rec_sockcall), sc);
 	rec->sockcall.n++;
 	atomic_inc(&rec->sockcall_id_mp);
 }
 static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	struct DeterRecorder* rec = sk->recorder;
-	struct derand_rec_sockcall sc;
+	struct deter_rec_sockcall sc;
 	int sc_id;
 
 	if (!rec)
@@ -363,7 +363,7 @@ static u32 new_sendmsg(struct sock *sk, struct msghdr *msg, size_t size){
 	// get sockcall ID
 	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
 
-	sc.type = DERAND_SOCKCALL_TYPE_SENDMSG;
+	sc.type = DETER_SOCKCALL_TYPE_SENDMSG;
 	sc.sendmsg.flags = msg->msg_flags;
 	sc.sendmsg.size = size;
 	sc.thread_id = (u64)current;
@@ -378,14 +378,14 @@ static u32 new_sendpage(struct sock *sk, int offset, size_t size, int flags){
 	struct DeterRecorder* rec = sk->recorder;
 	if (!rec)
 		return 0;
-	printk("[DERAND] %hu %hu: tcp_sendpage %d %lu %x!!!\n", ntohs(rec->sport), ntohs(rec->dport), offset, size, flags);
+	printk("[DETER] %hu %hu: tcp_sendpage %d %lu %x!!!\n", ntohs(rec->sport), ntohs(rec->dport), offset, size, flags);
 	return 0;
 }
 #endif
 
 static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock, int flags, int *addr_len){
 	struct DeterRecorder* rec = sk->recorder;
-	struct derand_rec_sockcall sc;
+	struct deter_rec_sockcall sc;
 	int sc_id;
 
 	if (!rec)
@@ -395,7 +395,7 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
 
 	// store data for this sockcall
-	sc.type = DERAND_SOCKCALL_TYPE_RECVMSG;
+	sc.type = DETER_SOCKCALL_TYPE_RECVMSG;
 	sc.recvmsg.flags = nonblock | flags;
 	sc.recvmsg.size = len;
 	sc.thread_id = (u64)current;
@@ -407,7 +407,7 @@ static u32 new_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonb
 
 static u32 new_splice_read(struct sock *sk, size_t len, unsigned int flags){
 	struct DeterRecorder* rec = sk->recorder;
-	struct derand_rec_sockcall sc;
+	struct deter_rec_sockcall sc;
 	int sc_id;
 
 	if (!rec)
@@ -417,7 +417,7 @@ static u32 new_splice_read(struct sock *sk, size_t len, unsigned int flags){
 	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
 
 	// store data for this sockcall
-	sc.type = DERAND_SOCKCALL_TYPE_SPLICE_READ;
+	sc.type = DETER_SOCKCALL_TYPE_SPLICE_READ;
 	sc.splice_read.flags = flags;
 	sc.splice_read.size = len;
 	sc.thread_id = (u64)current;
@@ -429,7 +429,7 @@ static u32 new_splice_read(struct sock *sk, size_t len, unsigned int flags){
 
 static u32 new_close(struct sock *sk, long timeout){
 	struct DeterRecorder* rec = sk->recorder;
-	struct derand_rec_sockcall sc;
+	struct deter_rec_sockcall sc;
 	int sc_id;
 
 	if (!rec)
@@ -438,7 +438,7 @@ static u32 new_close(struct sock *sk, long timeout){
 	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
 
 	// store data for this sockcall
-	sc.type = DERAND_SOCKCALL_TYPE_CLOSE;
+	sc.type = DETER_SOCKCALL_TYPE_CLOSE;
 	sc.close.timeout = timeout;
 	sc.thread_id = (u64)current;
 	put_sockcall(rec, sc_id, &sc);
@@ -449,7 +449,7 @@ static u32 new_close(struct sock *sk, long timeout){
 
 static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *optval, unsigned int optlen){
 	struct DeterRecorder* rec = sk->recorder;
-	struct derand_rec_sockcall sc;
+	struct deter_rec_sockcall sc;
 	int sc_id;
 
 	if (!rec)
@@ -458,7 +458,7 @@ static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *
 	sc_id = atomic_add_return(1, &rec->sockcall_id) - 1;
 
 	// store data for this sockcall
-	sc.type = DERAND_SOCKCALL_TYPE_SETSOCKOPT;
+	sc.type = DETER_SOCKCALL_TYPE_SETSOCKOPT;
 	if ((u32)level > 255 || (u32)optname > 255 || (u32)optlen > 12){ // use u32 so that negative values are also considered
 		sc.setsockopt.level = sc.setsockopt.optname = sc.setsockopt.optlen = 255;
 	}else {
@@ -478,7 +478,7 @@ static u32 new_setsockopt(struct sock *sk, int level, int optname, char __user *
  * These hooks are called right after getting the spin-lock
  ***************************************/
 static void sockcall_lock(struct sock *sk, u32 sc_id){
-	new_event(sk, sc_id + DERAND_SOCK_ID_BASE);
+	new_event(sk, sc_id + DETER_SOCK_ID_BASE);
 }
 
 /* incoming packets do not need to record their seq # */

@@ -15,7 +15,7 @@ int share_mem_to_user(void){
 	proc_deter_expose.output_func = expose_addr;
 	ret = proc_expose_start(&proc_deter_expose);
 	if (ret){
-		printk("[DERAND] share_mem_to_user: Fail to open proc file\n");
+		printk("[DETER] share_mem_to_user: Fail to open proc file\n");
 		return -1;
 	}
 	return 0;
