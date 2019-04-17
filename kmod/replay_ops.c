@@ -9,7 +9,7 @@
 #include "copy_to_sock_init_val.h"
 #include "logger.h"
 
-void deter_tcp_tasklet_func(struct sock *sk);
+void derand_tcp_tasklet_func(struct sock *sk);
 
 struct replay_ops replay_ops = {
 	.replayer = NULL,
@@ -144,7 +144,7 @@ int replay_kthread(void *args){
 		// issue this event
 		switch (evtq->v[get_event_q_idx(i)].type){
 			case EVENT_TYPE_TASKLET:
-				deter_tcp_tasklet_func(replay_ops.sk);
+				derand_tcp_tasklet_func(replay_ops.sk);
 				break;
 			case EVENT_TYPE_WRITE_TIMEOUT:
 				// We must deactivate the timers, because it affects sk->refcnt. The timer function calls sk_reset_timer(), which inc refcnt only if the timer is inactive/expired. Thus, if we do not deactivate the timer here, refcnt will not inc. Same for other timers.
