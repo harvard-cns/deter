@@ -748,7 +748,7 @@ static bool replay_skb_still_in_host_queue(const struct sock *sk, const struct s
 		return ret;
 	// if false, the skb should not be in the queue. So we should wait until the skb is REALLY not in the queue
 	while (skb_fclone_busy(sk, skb)){
-		deter_log("skb_still_in_host_queue: false => true\n");
+		deter_log("skb_still_in_host_queue %u: false => true; ipid:%hu\n", siqq->h - 1, ntohs(ip_hdr(skb)->id));
 		cond_resched_softirq(); // we need to allow bh, because freeing skb is in softirq
 	}
 	return ret;
