@@ -302,11 +302,7 @@ public:
 	tcp_sock_init_data init_data;
 	std::vector<derand_event> evts;
 	std::vector<derand_rec_sockcall> sockcalls;
-	#if USE_PKT_STREAM
 	std::vector<uint16_t> ps;
-	#else
-	std::vector<uint32_t> dpq;
-	#endif
 	std::vector<jiffies_rec> jiffies;
 	BitArray mpq;
 	std::vector<memory_allocated_rec> memory_allocated;

@@ -11,21 +11,12 @@ struct event_q{
 };
 #define get_event_q_idx(i) ((i) & (EVENT_Q_LEN - 1))
 
-#if USE_PKT_STREAM
 #define PS_Q_LEN 2018
 struct PsQ{
 	u32 h, t;
 	u16 n_consec, gap;
 	u16 v[PS_Q_LEN];
 };
-#else
-#define DROP_Q_LEN 1024
-struct DropQ{
-	u32 h, t;
-	u32 v[DROP_Q_LEN];
-};
-#define get_drop_q_idx(i) ((i) & (DROP_Q_LEN - 1))
-#endif
 
 #define JIFFIES_Q_LEN 8192
 struct jiffies_q{
@@ -93,11 +84,7 @@ struct DeterReplayer{
 	atomic_t sockcall_id; // current socket call ID
 	struct event_q evtq;
 	struct PktIdx pkt_idx;
-	#if USE_PKT_STREAM
 	struct PsQ ps;
-	#else
-	struct DropQ dpq;
-	#endif
 	struct jiffies_q jfq;
 	struct memory_pressure_q mpq;
 	struct memory_allocated_q maq;

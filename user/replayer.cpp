@@ -26,7 +26,6 @@ int Replayer::convert_event(){
 	return 0;
 }
 
-#if USE_PKT_STREAM
 int Replayer::convert_ps(){
 	auto &s = rec.ps;
 	u64 size = s.size();
@@ -40,21 +39,6 @@ int Replayer::convert_ps(){
 		memcpy(d->ps.v, &s[0], sizeof(uint32_t) * size);
 	return 0;
 }
-#else
-int Replayer::convert_drop(){
-	auto &s = rec.dpq;
-	u64 size = s.size();
-	if (size > DROP_Q_LEN){
-		fprintf(stderr, "too many drops: %lu > %u\n", size, DROP_Q_LEN);
-		return -1;
-	}
-	d->dpq.h = 0;
-	d->dpq.t = size;
-	if (size > 0)
-		memcpy(d->dpq.v, &s[0], sizeof(uint32_t) * size);
-	return 0;
-}
-#endif
 
 int Replayer::convert_jiffies(){
 	auto &s = rec.jiffies;
@@ -175,13 +159,8 @@ int Replayer::read_records(const string &record_file_name){
 	
 	if (convert_event())
 		return -2;
-	#if USE_PKT_STREAM
 	if (convert_ps())
 		return -3;
-	#else
-	if (convert_drop())
-		return -3;
-	#endif
 	if (convert_jiffies())
 		return -4;
 	if (convert_memory_pressure())

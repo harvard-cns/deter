@@ -16,11 +16,7 @@ public:
 	void set_addr(void *addr){d = (DeterReplayer*)addr;}
 	int read_records(const std::string &record_file_name);
 	int convert_event();
-	#if USE_PKT_STREAM
 	int convert_ps();
-	#else
-	int convert_drop();
-	#endif
 	int convert_jiffies();
 	int convert_memory_pressure();
 	int convert_memory_allocated();

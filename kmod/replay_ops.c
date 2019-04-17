@@ -768,14 +768,12 @@ static int kernel_log(const struct sock *sk, const char *fmt, ...){
 /****************************************
  * Packet corrector
  ***************************************/
-#if USE_PKT_STREAM
 struct PacketReorderBuf{
 	struct sk_buff *skb;
 	struct nf_hook_state state;
 	u32 idx;
 };
 struct PacketReorderBuf pkt_reorder_buf[65536]; // buffer for reordering
-#endif
 
 static inline bool should_replay_skb(struct sk_buff *skb){
 	struct iphdr *iph = ip_hdr(skb);
@@ -791,11 +789,6 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 	struct DeterReplayer *rep;
 	u32 idx, i;
 	u16 ipid;
-	#if !USE_PKT_STREAM
-	u32 last_idx;
-	int wrong_drop_cnt = 0, first_wrong = 0;
-	bool drop = false;
-	#endif
 	bool continue_check = true;
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
@@ -823,7 +816,6 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 		goto enqueue;
 	}
 
-	#if USE_PKT_STREAM
 	idx = rep->pkt_idx.idx++;
 	// TODO: check wrong drop
 
@@ -862,6 +854,7 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 			}
 		}
 		next_ipid = (u16)rep->pkt_idx.last_ipid + rep->ps.gap;
+		derand_log("next_ipid: %hu gap: %hd n_consec: %hu\n", next_ipid, rep->ps.gap, rep->ps.n_consec);
 
 		if (skb){ // check the incoming pkt
 			if (ipid == next_ipid){
@@ -905,46 +898,6 @@ static unsigned int packet_corrector_fn(void *priv, struct sk_buff *skb, const s
 		}
 	}
 	return NF_STOLEN;
-	#else
-	// update and get pkt idx
-	last_idx = rep->pkt_idx.idx;
-	idx = update_pkt_idx(&rep->pkt_idx, ipid);
-
-	// TODO: check if we should mark CE bit
-
-	// for i in [last_idx+1, idx], check wrong drop
-	// for i == idx, check if we should drop
-	for (i = last_idx + 1; i <= idx; i++){
-		drop = false;
-
-		// decide if i should drop or not, and set h to the next drop
-		while (rep->dpq.h < rep->dpq.t){
-			u32 drop_idx = rep->dpq.v[get_drop_q_idx(rep->dpq.h)];
-			if (drop_idx < i){
-				rep->dpq.h++;
-			}else if (drop_idx == i){ // should drop
-				rep->dpq.h++;
-				drop = true;
-				break;
-			}else{ // should not drop
-				drop = false;
-				break;
-			}
-		}
-
-		// if i should not drop, but mistakenly dropped, error
-		if (!drop && i < idx){
-			if (wrong_drop_cnt == 0)
-				first_wrong = i;
-			wrong_drop_cnt++;
-		}
-	}
-	if (wrong_drop_cnt)
-		derand_log("Error: pkt wrong drop: first: idx %u, total: %d\n", first_wrong, wrong_drop_cnt);
-
-	if (drop)
-		return NF_DROP;
-	#endif /* USE_PKT_STREAM */
 
 enqueue:
 	// enqueue this packet
@@ -1037,11 +990,9 @@ static void initialize_replay(struct DeterReplayer *r){
 	// initialize evtq
 	r->evtq.h = 0;
 
-	#if USE_PKT_STREAM
 	// initialize ps
 	r->ps.h = 0;
 	r->ps.n_consec = r->ps.gap = 0;
-	#endif
 
 	// initialize jfq
 	r->jfq.h = 0;

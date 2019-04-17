@@ -117,15 +117,9 @@ int Records::dump(const char* filename){
 	if (!dump_vector(sockcalls, fout))
 		goto fail_write;
 
-	#if USE_PKT_STREAM
 	// write ps
 	if (!dump_vector(ps, fout))
 		goto fail_write;
-	#else
-	// write drop
-	if (!dump_vector(dpq, fout))
-		goto fail_write;
-	#endif
 
 	// write jiffies_reads
 	if (!dump_vector(jiffies, fout))
@@ -214,15 +208,9 @@ int Records::read(const char* filename){
 	if (!read_vector(sockcalls, fin))
 		goto fail_read;
 
-	#if USE_PKT_STREAM
 	// read ps
 	if (!read_vector(ps, fin))
 		goto fail_read;
-	#else
-	// read drop
-	if (!read_vector(dpq, fin))
-		goto fail_read;
-	#endif
 
 	// read jiffies_reads
 	if (!read_vector(jiffies, fin))
@@ -452,7 +440,6 @@ void Records::print(FILE* fout){
 		fprintf(fout, "\n");
 	}
 
-	#if USE_PKT_STREAM
 	fprintf(fout, "%lu pkt_stream\n", ps.size());
 	for (uint32_t i = 0; i < ps.size(); i++){
 		if (ps[i] >> 15){
@@ -466,11 +453,6 @@ void Records::print(FILE* fout){
 		}else
 			fprintf(fout, "1:%hu\n", ps[i]);
 	}
-	#else
-	fprintf(fout, "%lu drops\n", dpq.size());
-	for (uint32_t i = 0; i < dpq.size(); i++)
-		fprintf(fout, "%u\n", dpq[i]);
-	#endif
 
 	fprintf(fout, "%lu new jiffies\n", jiffies.size());
 	if (jiffies.size() > 0){
@@ -675,11 +657,7 @@ void Records::clear(){
 	fin_seq = 0;
 	evts.clear();
 	sockcalls.clear();
-	#if USE_PKT_STREAM
 	ps.clear();
-	#else
-	dpq.clear();
-	#endif
 	jiffies.clear();
 	mpq.clear();
 	memory_allocated.clear();

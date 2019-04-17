@@ -148,11 +148,7 @@ static inline bool init_recorder_mb(struct DeterRecorder* rec){
 	// assign mb to recorder
 	rec->evt.mb = mbs[0];		mbs[0]->type = DETER_MEM_BLOCK_TYPE_EVT;
 	rec->sockcall.mb = mbs[1];	mbs[1]->type = DETER_MEM_BLOCK_TYPE_SOCKCALL;
-	#if USE_PKT_STREAM
 	rec->ps.mb = mbs[2];		mbs[2]->type = DETER_MEM_BLOCK_TYPE_PS;
-	#else
-	rec->dp.mb = mbs[2];		mbs[2]->type = DETER_MEM_BLOCK_TYPE_DP;
-	#endif
 	rec->jif.mb = mbs[3];		mbs[3]->type = DETER_MEM_BLOCK_TYPE_JIF;
 	rec->mp.mb = mbs[4];		mbs[4]->type = DETER_MEM_BLOCK_TYPE_MP;
 	rec->ma.mb = mbs[5];		mbs[5]->type = DETER_MEM_BLOCK_TYPE_MA;
@@ -216,16 +212,10 @@ static void recorder_create(struct sock *sk, struct sk_buff *skb, int mode){
 	while (!init_recorder_mb(rec)); // ensure we get enough valid mb
 
 	// init runtime states
-	#if USE_PKT_STREAM
 	rec->evt.n = rec->sockcall.n = rec->ps.n = rec->jif.n = rec->mp.n = rec->ma.n = rec->ms.n = rec->siq.n = 0;
-	#else
-	rec->evt.n = rec->sockcall.n = rec->dp.n = rec->jif.n = rec->mp.n = rec->ma.n = rec->ms.n = rec->siq.n = 0;
-	#endif
 	for (i = 0; i < DETER_EFFECT_BOOL_N_LOC; i++)
 		rec->eb[i].n = 0;
-	#if USE_PKT_STREAM
 	rec->ps.last = 0;
-	#endif
 	#if COLLECT_TX_STAMP
 	rec->ts.n = 0;
 	#endif
@@ -329,11 +319,7 @@ static void recorder_destruct(struct sock *sk){
 	// put mb to done_mb_ring
 	put_done_mem_block(rec->evt.mb);
 	put_done_mem_block(rec->sockcall.mb);
-	#if USE_PKT_STREAM
 	put_done_mem_block(rec->ps.mb);
-	#else
-	put_done_mem_block(rec->dp.mb);
-	#endif
 	put_done_mem_block(rec->jif.mb);
 	put_done_mem_block(rec->mp.mb);
 	put_done_mem_block(rec->ma.mb);
@@ -533,7 +519,6 @@ static inline bool ps_normal_not_full(u16 x){
 void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	struct DeterRecorder *rec = (struct DeterRecorder*)sk->recorder;
 	u16 ipid, gap;
-	u32 i, idx;
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((u32 *)iph + iph->ihl);
 	if (!rec)
@@ -553,7 +538,6 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 	}
 
 	gap = get_pkt_idx_gap(&rec->pkt_idx, ipid);
-	#if USE_PKT_STREAM
 	if (gap == 1){ // normal
 		u16 x = rec->ps.last;
 		if (ps_normal_not_full(x))
@@ -591,14 +575,6 @@ void mon_net_action(struct sock *sk, struct sk_buff *skb){
 			}
 		}
 	}
-	#else
-	idx = rec->pkt_idx.idx;
-
-	for (i = 1; i < gap; i++){
-		push_u32(rec, &rec->dp.mb, DETER_MEM_BLOCK_TYPE_DP, idx + i);
-		rec->dp.n++;
-	}
-	#endif
 	update_pkt_idx(&rec->pkt_idx, ipid);
 }
 
