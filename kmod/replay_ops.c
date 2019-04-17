@@ -743,6 +743,8 @@ static bool replay_skb_still_in_host_queue(const struct sock *sk, const struct s
 		ret = (siqq->v[idx / 32] >> (idx & 31)) & 1;
 	}
 
+	return ret;
+	#if 0
 	// if true, the kernel code will skip the retransmission, so just return true
 	if (ret)
 		return ret;
@@ -752,6 +754,7 @@ static bool replay_skb_still_in_host_queue(const struct sock *sk, const struct s
 		cond_resched_softirq(); // we need to allow bh, because freeing skb is in softirq
 	}
 	return ret;
+	#endif
 }
 
 static int kernel_log(const struct sock *sk, const char *fmt, ...){
