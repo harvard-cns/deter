@@ -5,7 +5,7 @@ deter_recorder-objs := recorder.o record_ctrl.o record_ops.o proc_expose.o recor
 deter_replayer-objs := replayer.o replay_ctrl.o replay_ops.o proc_expose.o mem_util.o logger.o
 
 CURRENT_PATH := $(shell pwd)
-LINUX_KERNEL_PATH := /usr/src/derand_kernel_4.4.98/
+LINUX_KERNEL_PATH := /usr/src/deter_kernel_4.4.98/
 all:
 	$(MAKE) -C $(LINUX_KERNEL_PATH) M=$(CURRENT_PATH) modules
 clean:
