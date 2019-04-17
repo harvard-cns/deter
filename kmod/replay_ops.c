@@ -293,11 +293,13 @@ static void client_recorder_create(struct sock *sk, struct sk_buff *skb){
 	replayer_create(sk, skb);
 }
 
+static void finish_sock(struct sock *sk);
 static void recorder_destruct(struct sock *sk){
 	// do some finish job. Print some stats
 	struct DeterReplayer *r = sk->replayer;
 	if (!r)
 		return;
+	finish_sock(sk);
 	derand_log("recorder_destruct: h:%u t:%u\n", r->evtq.h, r->evtq.t);
 	if (replay_ops.state == STARTED)
 		replay_ops.state = SHOULD_STOP;
@@ -1065,6 +1067,20 @@ static void initialize_replay(struct DeterReplayer *r){
 		r->ebq[i].h = 0;
 
 	//derand_log("%u %u %u %u %u\n", r->evtq.t, r->jfq.t, r->mpq.t, r->maq.t, r->msq.t);
+}
+
+static void finish_sock(struct sock *sk){
+	int i;
+	struct DeterReplayer *r = sk->replayer;
+	if (!r)
+		return;
+	for (i = 0; i < 65536; i++){
+		struct PacketReorderBuf *buf = &pkt_reorder_buf[i];
+		if (buf->skb){
+			kfree_skb(buf->skb);
+			buf->skb = NULL;
+		}
+	}
 }
 
 int replay_ops_start(struct DeterReplayer *addr){
